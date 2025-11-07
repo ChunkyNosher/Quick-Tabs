@@ -72,6 +72,8 @@
     let commandListenerAdded = false;
     let wasExpandedForDrag = false;
 	let hoveredTab = null; // Track the currently hovered tab
+	let hoveredLinkUrl = null; // Track the currently hovered link URL
+	let hoveredLinkTitle = null; // Track the currently hovered link title
 
 
     // Quick Tab command state for passing parameters
@@ -1985,6 +1987,7 @@
         addTabContextMenuItem();
         setupCommandPaletteIntegration();
 		setupTabHoverDetection();
+		setupLinkHoverDetection();
 		setupKeyboardShortcuts();
 
 
@@ -2180,6 +2183,48 @@
 		console.log('QuickTabs: Tab hover detection set up');
 	}
 
+	// Set up link hover detection on web pages
+	function setupLinkHoverDetection() {
+		console.log('QuickTabs: Setting up link hover detection');
+
+		// Listen for mouseover events on the entire document to detect link hovers
+		document.addEventListener('mouseover', (event) => {
+			// Check if the target or any ancestor is a link
+			let target = event.target;
+			while (target && target !== document) {
+				if (target.tagName === 'A' && target.href) {
+					hoveredLinkUrl = target.href;
+					// Get link text - try textContent, then title attribute, then empty string
+					hoveredLinkTitle = target.textContent?.trim() || target.title?.trim() || '';
+					console.log('QuickTabs: Link hovered:', hoveredLinkUrl, 'Title:', hoveredLinkTitle);
+					return;
+				}
+				target = target.parentElement;
+			}
+		}, true); // Use capture phase
+
+		// Listen for mouseout events to clear the hovered link
+		document.addEventListener('mouseout', (event) => {
+			// Check if we're leaving a link
+			let target = event.target;
+			while (target && target !== document) {
+				if (target.tagName === 'A' && target.href) {
+					// Only clear if we're not moving to a child element
+					// relatedTarget can be null when leaving the document
+					if (!event.relatedTarget || !target.contains(event.relatedTarget)) {
+						hoveredLinkUrl = null;
+						hoveredLinkTitle = null;
+						console.log('QuickTabs: Link hover ended');
+					}
+					return;
+				}
+				target = target.parentElement;
+			}
+		}, true); // Use capture phase
+
+		console.log('QuickTabs: Link hover detection set up');
+	}
+
 	// Parse keyboard shortcut strings like "Control+E", "Shift+Alt+T", etc.
 	function parseKeyboardShortcut(shortcutString) {
 		if (!shortcutString || shortcutString.trim() === '') {
@@ -2228,18 +2273,38 @@
 				event.preventDefault();
 				event.stopPropagation();
 				console.log('QuickTabs: Shortcut triggered!');
-				handleHoveredTabQuickOpen();
+				handleQuickOpen();
 			}
 		}, true); // Use capture phase
 
 		console.log('QuickTabs: Keyboard shortcuts set up with:', KEYBOARD_SHORTCUT);
 	}
 
-	// Handle opening a Quick Tab from the hovered tab
-	function handleHoveredTabQuickOpen() {
+	// Handle opening a Quick Tab from hovered link or tab
+	function handleQuickOpen() {
+		// Check for hovered link first
+		if (hoveredLinkUrl) {
+			console.log('QuickTabs: Opening Quick Tab from hovered link:', hoveredLinkUrl);
+			
+			try {
+				const containerInfo = createQuickTabContainer(hoveredLinkUrl, hoveredLinkTitle);
+				
+				if (containerInfo) {
+					showNotification('Quick Tab opened from link', 'success');
+				} else {
+					showNotification('Failed to create Quick Tab', 'error');
+				}
+			} catch (error) {
+				console.error('QuickTabs: Error opening Quick Tab from hovered link:', error);
+				showNotification('Error opening Quick Tab', 'error');
+			}
+			return;
+		}
+
+		// Fall back to hovered tab
 		if (!hoveredTab) {
-			console.warn('QuickTabs: No hovered tab available');
-			showNotification('No tab hovered - move your mouse over a tab first', 'warning');
+			console.warn('QuickTabs: No hovered tab or link available');
+			showNotification('No Tab Hovered', 'warning');
 			return;
 		}
 
