@@ -2262,16 +2262,16 @@
 									if (currentHoveredLink !== target) {
 										currentHoveredLink = target;
 										
-										// Store in a data attribute that chrome can access
+										// Prepare link data to send to chrome context
 										const linkData = {
 											url: target.href,
 											title: target.textContent?.trim() || 
 												   target.title?.trim() || 
 												   target.getAttribute('aria-label')?.trim() || 
-												   target.href
+												   'Link'
 										};
 										
-										// Create custom event with link data
+										// Dispatch custom event with link data to chrome context
 										window.dispatchEvent(new CustomEvent('quicktabs-link-hover', {
 											detail: linkData
 										}));
@@ -2282,15 +2282,9 @@
 								}
 								target = target.parentElement;
 							}
-							
-							// No link found - only dispatch unhover if we were previously hovering a link
-							if (currentHoveredLink !== null) {
-								currentHoveredLink = null;
-								window.dispatchEvent(new CustomEvent('quicktabs-link-unhover'));
-							}
 						}, true); // Capture phase
 						
-						// Also handle mouseout
+						// Handle mouseout to detect when leaving links
 						document.addEventListener('mouseout', (event) => {
 							let target = event.target;
 							
@@ -2313,10 +2307,17 @@
 					})();
 				`;
 				
-				// Insert script into page
+				// Insert script into page and let it execute
 				browser.contentDocument.documentElement.appendChild(script);
-				// Remove the script element after insertion
-				script.remove();
+				
+				// Remove the script element after a brief delay to ensure execution completes
+				setTimeout(() => {
+					try {
+						script.remove();
+					} catch (e) {
+						// Script may have already been removed, ignore
+					}
+				}, 50);
 				
 				console.log('QuickTabs: Content script injected successfully');
 				
