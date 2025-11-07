@@ -117,20 +117,25 @@ Before testing, ensure:
 **Steps**:
 1. Open the Browser Console (Ctrl+Shift+J - NOT the page console)
 2. Navigate to YouTube: https://www.youtube.com
-3. Wait 1-2 seconds
+3. Wait 1-2 seconds (Quick Tabs will poll for the marker for up to 10 seconds)
 4. Look for messages:
    ```
    QuickTabs: Setting up link hover detection via extension marker
-   QuickTabs: Marker element found, setting up observer
+   QuickTabs: Marker not found yet, waiting...
+   QuickTabs: Marker element found after XXX ms
+   QuickTabs: Setting up marker observer
    QuickTabs: Marker observer set up successfully
    ```
 
-**Expected Result**: ✅ All three messages appear in browser console
+**Expected Result**: ✅ Messages show polling activity and successful marker detection
+
+**Note**: With the improved retry mechanism, Quick Tabs now polls every 500ms for up to 10 seconds to find the marker, which resolves race conditions where the extension's content script hasn't loaded yet.
 
 **Troubleshooting**:
-- If you see "Marker not found yet, waiting...", the extension might not have created it yet
-- Refresh the page and try again
+- If you see "Marker detection timed out after 10000 ms", the extension may not be installed or not active on this page
+- Check that the Copy-URL extension is enabled and properly modified
 - Verify the extension is active on this website
+- If timeout occurs on non-content pages (about:, chrome://), this is expected behavior
 
 ---
 
@@ -253,13 +258,18 @@ Before testing, ensure:
 **Steps**:
 1. Disable the Copy-URL extension in about:debugging
 2. Refresh a webpage
-3. Check browser console - may show "Marker not found yet, waiting..."
+3. Check browser console - should show:
+   - "Marker not found yet, waiting..." (repeating every 500ms)
+   - "Marker detection timed out after 10000 ms" (after 10 seconds)
+   - "Marker not detected - extension may not be installed or page not supported"
 4. Hover over a browser tab
 5. Press Ctrl+E
 
 **Expected Result**:
 - ✅ No errors occur
 - ✅ Tab hover still works
+- ✅ Polling stops after 10 seconds timeout
+- ✅ Informative message about extension not being detected
 - ✅ Link hover gracefully fails (expected)
 
 ---
