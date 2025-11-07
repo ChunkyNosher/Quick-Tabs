@@ -2183,44 +2183,135 @@
 		console.log('QuickTabs: Tab hover detection set up');
 	}
 
+	// WeakSet to track which content documents already have listeners
+	const documentsWithLinkListeners = new WeakSet();
+
 	// Set up link hover detection on web pages
 	function setupLinkHoverDetection() {
 		console.log('QuickTabs: Setting up link hover detection');
 
-		// Listen for mouseover events on the entire document to detect link hovers
-		document.addEventListener('mouseover', (event) => {
-			// Check if the target or any ancestor is a link
-			let target = event.target;
-			while (target && target !== document) {
-				if (target.tagName === 'A' && target.href) {
-					hoveredLinkUrl = target.href;
-					// Get link text - try textContent, then title attribute, then empty string
-					hoveredLinkTitle = target.textContent?.trim() || target.title?.trim() || '';
-					console.log('QuickTabs: Link hovered:', hoveredLinkUrl, 'Title:', hoveredLinkTitle);
-					return;
+		// Function to get the active browser element
+		const getActiveBrowser = () => {
+			try {
+				if (typeof gBrowser !== 'undefined' && gBrowser.selectedBrowser) {
+					return gBrowser.selectedBrowser;
 				}
-				target = target.parentElement;
+			} catch (e) {
+				console.warn('QuickTabs: Could not get active browser:', e);
 			}
-		}, true); // Use capture phase
+			return null;
+		};
 
-		// Listen for mouseout events to clear the hovered link
-		document.addEventListener('mouseout', (event) => {
-			// Check if we're leaving a link
-			let target = event.target;
-			while (target && target !== document) {
-				if (target.tagName === 'A' && target.href) {
-					// Only clear if we're not moving to a child element
-					// relatedTarget can be null when leaving the document
-					if (!event.relatedTarget || !target.contains(event.relatedTarget)) {
-						hoveredLinkUrl = null;
-						hoveredLinkTitle = null;
-						console.log('QuickTabs: Link hover ended');
-					}
+		// Function to attach listeners to a browser's content document
+		const attachBrowserListeners = (browser) => {
+			if (!browser || !browser.contentWindow) {
+				console.log('QuickTabs: Browser or contentWindow not available');
+				return;
+			}
+
+			try {
+				const contentDocument = browser.contentDocument;
+
+				if (!contentDocument) {
+					console.log('QuickTabs: Content document not accessible');
 					return;
 				}
-				target = target.parentElement;
+
+				// Skip if listeners already attached to this document
+				if (documentsWithLinkListeners.has(contentDocument)) {
+					console.log('QuickTabs: Listeners already attached to this content document');
+					return;
+				}
+
+				// Mark this document as having listeners
+				documentsWithLinkListeners.add(contentDocument);
+				console.log('QuickTabs: Attaching link hover listeners to content document');
+
+				// Listen for mouseover events within the web content
+				contentDocument.addEventListener('mouseover', (event) => {
+					let target = event.target;
+
+					// Walk up the DOM tree to find a link
+					while (target && target !== contentDocument) {
+						if (target.tagName === 'A' && target.href) {
+							hoveredLinkUrl = target.href;
+							hoveredLinkTitle = (target.textContent?.trim() || 
+							                     target.title?.trim() || 
+							                     target.getAttribute('aria-label')?.trim() || '');
+							
+							console.log('QuickTabs: Link hovered in content:', hoveredLinkUrl);
+							return;
+						}
+						target = target.parentElement;
+					}
+				}, true); // Capture phase
+
+				// Listen for mouseout events
+				contentDocument.addEventListener('mouseout', (event) => {
+					let target = event.target;
+
+					while (target && target !== contentDocument) {
+						if (target.tagName === 'A' && target.href) {
+							// Only clear if leaving the link entirely
+							if (!event.relatedTarget || !target.contains(event.relatedTarget)) {
+								hoveredLinkUrl = null;
+								hoveredLinkTitle = null;
+								console.log('QuickTabs: Link hover ended');
+							}
+							return;
+						}
+						target = target.parentElement;
+					}
+				}, true); // Capture phase
+
+				console.log('QuickTabs: Listeners attached to browser content');
+
+			} catch (e) {
+				console.warn('QuickTabs: Error attaching listeners to browser content:', e);
 			}
-		}, true); // Use capture phase
+		};
+
+		// Attach listeners to the currently active browser
+		const activeBrowser = getActiveBrowser();
+		if (activeBrowser) {
+			attachBrowserListeners(activeBrowser);
+		}
+
+		// Listen for tab switches and attach listeners to new active tabs
+		try {
+			if (typeof gBrowser !== 'undefined') {
+				gBrowser.tabContainer.addEventListener('TabSelect', () => {
+					console.log('QuickTabs: Tab switched, updating browser listeners');
+					// Clear hovered link when switching tabs
+					hoveredLinkUrl = null;
+					hoveredLinkTitle = null;
+					const newActiveBrowser = getActiveBrowser();
+					if (newActiveBrowser) {
+						attachBrowserListeners(newActiveBrowser);
+					}
+				});
+			}
+		} catch (e) {
+			console.warn('QuickTabs: Could not set up tab switch listener:', e);
+		}
+
+		// Listen for page loads to re-attach listeners (in case content reloads)
+		try {
+			if (typeof gBrowser !== 'undefined') {
+				gBrowser.addEventListener('load', (event) => {
+					// Only handle load events from content documents
+					if (event.target && event.target.defaultView && event.target.defaultView === event.target.defaultView.top) {
+						console.log('QuickTabs: Page loaded, re-attaching listeners');
+						const browser = gBrowser.getBrowserForDocument(event.target);
+						if (browser) {
+							attachBrowserListeners(browser);
+						}
+					}
+				}, true);
+			}
+		} catch (e) {
+			console.warn('QuickTabs: Could not set up page load listener:', e);
+		}
 
 		console.log('QuickTabs: Link hover detection set up');
 	}
@@ -2282,15 +2373,20 @@
 
 	// Handle opening a Quick Tab from hovered link or tab
 	function handleQuickOpen() {
-		// Check for hovered link first
-		if (hoveredLinkUrl) {
+		console.log('QuickTabs: Quick open triggered');
+		console.log('  - hoveredLinkUrl:', hoveredLinkUrl);
+		console.log('  - hoveredTab:', hoveredTab);
+
+		// Check for hovered link first (higher priority)
+		if (hoveredLinkUrl && hoveredLinkUrl.trim() !== '') {
 			console.log('QuickTabs: Opening Quick Tab from hovered link:', hoveredLinkUrl);
 			
 			try {
-				const containerInfo = createQuickTabContainer(hoveredLinkUrl, hoveredLinkTitle);
+				const linkTitle = hoveredLinkTitle || getTabTitle(hoveredLinkUrl);
+				const containerInfo = createQuickTabContainer(hoveredLinkUrl, linkTitle);
 				
 				if (containerInfo) {
-					showNotification('Quick Tab opened from link', 'success');
+					showNotification('Quick Tab opened from link: ' + truncateText(linkTitle, 30), 'success');
 				} else {
 					showNotification('Failed to create Quick Tab', 'error');
 				}
@@ -2302,38 +2398,40 @@
 		}
 
 		// Fall back to hovered tab
-		if (!hoveredTab) {
-			console.warn('QuickTabs: No hovered tab or link available');
-			showNotification('No Tab Hovered', 'warning');
+		if (hoveredTab) {
+			console.log('QuickTabs: Opening Quick Tab from hovered tab');
+			
+			try {
+				const tabData = getTabData(hoveredTab);
+				
+				if (!tabData.url || tabData.url === 'about:blank') {
+					console.warn('QuickTabs: Hovered tab has no valid URL:', tabData.url);
+					showNotification('Tab has no valid URL', 'warning');
+					return;
+				}
+
+				console.log('QuickTabs: Opening Quick Tab from hovered tab:', {
+					url: tabData.url,
+					title: tabData.title
+				});
+
+				const containerInfo = createQuickTabContainer(tabData.url, tabData.title);
+				
+				if (containerInfo) {
+					showNotification('Quick Tab opened: ' + truncateText(tabData.title, 30), 'success');
+				} else {
+					showNotification('Failed to create Quick Tab', 'error');
+				}
+			} catch (error) {
+				console.error('QuickTabs: Error opening Quick Tab from hovered tab:', error);
+				showNotification('Error opening Quick Tab', 'error');
+			}
 			return;
 		}
 
-		try {
-			const tabData = getTabData(hoveredTab);
-
-			if (!tabData.url || tabData.url === 'about:blank') {
-				console.warn('QuickTabs: Hovered tab has no valid URL:', tabData.url);
-				showNotification('Tab has no valid URL', 'warning');
-				return;
-			}
-
-			console.log('QuickTabs: Opening Quick Tab from hovered tab:', {
-				url: tabData.url,
-				title: tabData.title
-			});
-
-			const containerInfo = createQuickTabContainer(tabData.url, tabData.title);
-
-			if (containerInfo) {
-				showNotification('Quick Tab opened: ' + truncateText(tabData.title, 30), 'success');
-			} else {
-				showNotification('Failed to create Quick Tab', 'error');
-			}
-
-		} catch (error) {
-			console.error('QuickTabs: Error opening Quick Tab from hovered tab:', error);
-			showNotification('Error opening Quick Tab', 'error');
-		}
+		// No link or tab hovered
+		console.warn('QuickTabs: No hovered tab or link available');
+		showNotification('No link or tab hovered', 'warning');
 	}
 
 	// Show notification to user
