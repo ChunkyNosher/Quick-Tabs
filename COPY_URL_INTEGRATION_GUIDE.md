@@ -16,7 +16,7 @@ The integration works through a **DOM marker bridge**:
 
 ## Step 1: Add Quick Tabs Integration Code
 
-Open `content.js` in the Copy-URL extension and add the following code **after line 82** (right after the `lastMouseY` variable declaration):
+Open `content.js` in the Copy-URL extension and add the following code **after the variable declarations** (look for the lines declaring `let lastMouseX` and `let lastMouseY`, and add this code right after them):
 
 ```javascript
 // ============================================================
@@ -82,7 +82,17 @@ initQuickTabsMarker();
 
 ## Step 2: Update the Mouseover Event Handler
 
-Find the `mouseover` event listener (around **line 1471**) and add the marker update call. Look for this section:
+Find the `mouseover` event listener. Search for `document.addEventListener('mouseover'` in `content.js`. Look for this section within that event handler:
+
+```javascript
+const url = findUrl(element, domainType);
+if (url) {
+    currentHoveredLink = element;
+    currentHoveredElement = element;
+    debug(`[${domainType}] URL found: ${url}`);
+```
+
+Add the marker update call right after `currentHoveredElement = element;`:
 
 ```javascript
 const url = findUrl(element, domainType);
@@ -108,7 +118,7 @@ if (url) {
 
 ## Step 3: Update the Mouseout Event Handler
 
-Find the `mouseout` event listener (around **line 1553**) and add the marker clearing call:
+Find the `mouseout` event listener. Search for `document.addEventListener('mouseout'` in `content.js` and add the marker clearing call:
 
 ```javascript
 document.addEventListener('mouseout', function(event) {
