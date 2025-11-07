@@ -29,6 +29,11 @@ Quick Tabs provides a unique way to browse multiple websites simultaneously with
   - Double-click on a Quick Tab's title to customize its name. Renamed titles persist and are not overwritten by page changes.
 - **Zen Command Palette Integration**:
   - Access Quick Tabs commands (e.g., close all, minimize all, expand/minimize specific tabs) directly from the [Zen Command Palette](https://github.com/BibekBhusal0/zen-custom-js).
+- **Copy-URL Extension Integration**:
+  - Works seamlessly with the [Copy-URL-on-Hover Firefox Extension](https://github.com/Vinfall/copy-url-on-hover) to detect hovered links on web pages
+  - Press Ctrl+E (customizable) while hovering over any link to instantly open it in a Quick Tab
+  - Leverages the extension's comprehensive link detection across 100+ websites including YouTube, Twitter, GitHub, Reddit, and more
+  - Falls back to built-in tab hover detection if the extension is not installed
 - **Quick Search Integration (Coming Soon)**:
   - Open the Quick Search result in a Quick Tab
 
@@ -54,15 +59,53 @@ OR
 
 ## Usage
 
+### Basic Usage
+
 1. **Opening Quick Tabs**:
    - Right-click any link → "Open Quick Tab"
    - **Drag-and-Drop**: Drag a link from any webpage or application onto the Quick Tabs taskbar (bottom-right of the window). The taskbar will appear dynamically when a link is dragged over the browser window.
+   - **Keyboard Shortcut (Ctrl+E)**: Hover over any tab or link and press Ctrl+E to open it in a Quick Tab
 2. **Managing Windows**: 
    - Drag the header to move
    - Use resize handle (bottom-right) to resize
    - Minimize/Close buttons in header (this can also be done if through URL bar if you have Zen Command Palette)
    - **Renaming Titles**: Double-click on the Quick Tab's title in its header to edit its name. Press Enter to save or Escape to cancel.
 3. **Taskbar**: Hover over the taskbar (bottom-right) to see all Quick Tabs
+4. **Switching**: Click taskbar items to focus or restore minimized tabs
+
+### Using with Copy-URL-on-Hover Extension (Recommended)
+
+For enhanced link detection across websites like YouTube, Twitter, Reddit, and 100+ more:
+
+> **⚠️ Important**: The Copy-URL-on-Hover extension requires modifications to work with Quick Tabs. See the [Extension Modifications](#extension-modifications-required) section below for detailed instructions.
+
+1. **Install and Modify the Extension**:
+   - Download [Copy-URL-on-Hover](https://github.com/Vinfall/copy-url-on-hover) source code
+   - Apply the modifications described in the [Extension Modifications](#extension-modifications-required) section
+   - Load the modified extension in Firefox (about:debugging → Load Temporary Add-on)
+
+2. **How It Works**:
+   - The modified extension creates a hidden marker element (`quicktabs-link-marker`) in each web page
+   - When you hover over a link, it updates the marker with the link's URL and title
+   - Quick Tabs observes this marker and makes the link data available for Ctrl+E
+
+3. **Opening Links in Quick Tabs**:
+   - Hover over any link on a webpage (video thumbnail, tweet, article, etc.)
+   - Press **Ctrl+E** (or your configured keyboard shortcut)
+   - The link instantly opens in a new Quick Tab container
+
+4. **Supported Websites**:
+   - YouTube (video links, channel links, playlist links)
+   - Twitter/X (tweets, profiles, links in tweets)
+   - Reddit (posts, comments, subreddits)
+   - GitHub (repositories, issues, pull requests)
+   - And 100+ more websites with specialized link detection
+
+5. **Fallback Behavior**:
+   - If the extension is not installed or modified, Quick Tabs will still work with tab hover detection
+   - You can still use Ctrl+E on browser tabs to open them in Quick Tabs
+
+
 4. **Switching**: Click taskbar items to focus or restore minimized tabs
 
 ## Preferences
@@ -99,7 +142,160 @@ extensions.quicktabs.taskbar.minWidth = 200
 extensions.quicktabs.animations.enabled = true
 extensions.quicktabs.initialPosition = "center" // e.g., "top-left", "bottom-right"
 extensions.quicktabs.commandpalette.dynamic.enabled = true
+extensions.quicktabs.keyboard_shortcut = "Control+E" // Keyboard shortcut to open Quick Tab from hovered link/tab
 ```
+
+## Integration with Copy-URL-on-Hover Extension
+
+Quick Tabs can integrate with the [Copy-URL-on-Hover Firefox Extension](https://github.com/Vinfall/copy-url-on-hover) to provide enhanced link detection across web pages.
+
+### How the Integration Works
+
+The integration uses a **DOM marker bridge** approach:
+
+1. **Extension Side**: Copy-URL-on-Hover creates a hidden marker element (`quicktabs-link-marker`) in each webpage
+2. **Extension Updates Marker**: When you hover over a link, the extension sets attributes on the marker:
+   - `data-hovered-url`: The detected link URL
+   - `data-hovered-title`: The link title or text
+   - `data-state`: Either `"hovering"` or `"idle"`
+3. **Quick Tabs Observes**: Quick Tabs uses a MutationObserver to watch for changes to the marker's attributes
+4. **Quick Tab Opens**: When you press Ctrl+E while hovering over a link, Quick Tabs reads the URL from the marker and opens it
+
+### Benefits
+
+- ✅ **Leverages Extension's Link Detection**: Uses Copy-URL's 100+ website handlers (YouTube, Twitter, Reddit, GitHub, etc.)
+- ✅ **No Code Duplication**: Quick Tabs doesn't need to reimplement link detection
+- ✅ **Automatic Updates**: Benefits from Copy-URL extension updates
+- ✅ **Graceful Fallback**: Still works with tab hover detection if extension is not installed
+
+### Technical Details
+
+- **Marker ID**: `quicktabs-link-marker`
+- **Communication**: DOM attributes observed via MutationObserver
+- **Sandbox Crossing**: DOM mutations are observable across the content/chrome boundary
+- **Performance**: Lightweight observation with no polling
+
+### Extension Modifications Required
+
+To enable Quick Tabs integration, the Copy-URL-on-Hover extension needs to be modified to create and update the DOM marker element. Here's what needs to be added to the extension's `content.js` file:
+
+#### Step 1: Add Quick Tabs Integration Code
+
+Add this code to `content.js` (around line 80, after the CONFIG initialization):
+
+```javascript
+// ============================================================
+// QUICK TABS INTEGRATION - DOM Marker Bridge
+// ============================================================
+
+const QUICKTABS_MARKER_ID = 'quicktabs-link-marker';
+let quickTabsMarker = null;
+
+// Create marker element for Quick Tabs communication
+function initQuickTabsMarker() {
+    // Check if marker already exists
+    quickTabsMarker = document.getElementById(QUICKTABS_MARKER_ID);
+    
+    if (!quickTabsMarker) {
+        quickTabsMarker = document.createElement('div');
+        quickTabsMarker.id = QUICKTABS_MARKER_ID;
+        quickTabsMarker.style.display = 'none';
+        quickTabsMarker.style.pointerEvents = 'none';
+        
+        // Append to body when it's available
+        if (document.body) {
+            document.body.appendChild(quickTabsMarker);
+            console.log('CopyURL: Quick Tabs marker created');
+        } else {
+            // Wait for DOM to be ready
+            document.addEventListener('DOMContentLoaded', () => {
+                document.body.appendChild(quickTabsMarker);
+                console.log('CopyURL: Quick Tabs marker created (DOMContentLoaded)');
+            });
+        }
+    }
+}
+
+// Update Quick Tabs marker with current hovered link
+function updateQuickTabsMarker(url, title) {
+    if (!quickTabsMarker) {
+        initQuickTabsMarker();
+    }
+    
+    if (quickTabsMarker) {
+        if (url && url.trim() !== '') {
+            quickTabsMarker.setAttribute('data-hovered-url', url);
+            quickTabsMarker.setAttribute('data-hovered-title', title || url);
+            quickTabsMarker.setAttribute('data-state', 'hovering');
+            console.log('CopyURL: Updated Quick Tabs marker:', url);
+        } else {
+            quickTabsMarker.removeAttribute('data-hovered-url');
+            quickTabsMarker.removeAttribute('data-hovered-title');
+            quickTabsMarker.setAttribute('data-state', 'idle');
+            console.log('CopyURL: Cleared Quick Tabs marker');
+        }
+    }
+}
+
+// Initialize marker on load
+initQuickTabsMarker();
+
+// ============================================================
+// END QUICK TABS INTEGRATION
+// ============================================================
+```
+
+#### Step 2: Update Hover Detection
+
+Modify the existing `mouseover` event listener in `content.js` (around line 2400) to call `updateQuickTabsMarker()`:
+
+```javascript
+document.addEventListener('mouseover', function(event) {
+    let target = event.target;
+    let element = null;
+    const domainType = getDomainType();
+    
+    // ... existing code that finds the element and URL ...
+    
+    const url = findUrl(element, domainType);
+    if (url) {
+        currentHoveredLink = element;
+        currentHoveredElement = element;
+        
+        // ADD THIS LINE - Update Quick Tabs marker
+        updateQuickTabsMarker(url, getLinkText(element));
+        
+        debug(`${domainType}: URL found: ${url}`);
+    } else {
+        debug(`${domainType}: No URL found for element`);
+    }
+}, true);
+```
+
+#### Step 3: Clear Marker on Mouse Out
+
+Update the `mouseout` event listener in `content.js` (around line 2450):
+
+```javascript
+document.addEventListener('mouseout', function(event) {
+    currentHoveredLink = null;
+    currentHoveredElement = null;
+    
+    // ADD THIS LINE - Clear Quick Tabs marker
+    updateQuickTabsMarker(null, null);
+}, true);
+```
+
+#### Testing the Integration
+
+After making these changes:
+
+1. Load the modified extension in Firefox (about:debugging → Load Temporary Add-on)
+2. Open the browser console (Ctrl+Shift+J)
+3. Navigate to a website like YouTube
+4. Hover over a video link - you should see: `CopyURL: Updated Quick Tabs marker: https://youtube.com/...`
+5. Move mouse away - you should see: `CopyURL: Cleared Quick Tabs marker`
+6. With Quick Tabs installed, press Ctrl+E while hovering over a link to open it in a Quick Tab
 
 ## API Reference
 
