@@ -126,5 +126,18 @@
     "label": "Taskbar minimum width (pixels)",
     "default": "200",
     "restart": true
+  },
+  {
+    "type": "separator",
+    "label": "⌨️ Keyboard Shortcuts",
+    "margin": "25px 0 8px 0"
+  },
+  {
+    "type": "string",
+    "property": "extensions.quicktabs.keyboard_shortcut",
+    "label": "Keyboard shortcut to open Quick Tab over hovered tab",
+    "default": "Control+E",
+    "restart": true,
+    "help": "Use format like: Control+E, Shift+Alt+T, Meta+K"
   }
 ] 
