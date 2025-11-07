@@ -2131,9 +2131,10 @@
 			
 			console.log('QuickTabs: Found', tabs.length, 'tab elements');
 			
-			tabs.forEach(tab => {
+			// Use for...of loop for better performance
+			for (const tab of tabs) {
 				// Avoid adding multiple listeners using WeakSet
-				if (tabsWithListeners.has(tab)) return;
+				if (tabsWithListeners.has(tab)) continue;
 				tabsWithListeners.add(tab);
 				
 				tab.addEventListener('mouseenter', () => {
@@ -2147,7 +2148,7 @@
 						console.log('QuickTabs: Tab hover ended');
 					}
 				});
-			});
+			}
 		};
 
 		// Initial setup
@@ -2157,22 +2158,17 @@
 		let updateTimeout = null;
 		const observer = new MutationObserver((mutations) => {
 			// Only update if we actually have tab-related changes
-			let hasTabChanges = false;
-			for (const mutation of mutations) {
+			// Use labeled break for better performance
+			outerLoop: for (const mutation of mutations) {
 				for (const node of mutation.addedNodes) {
 					if (node.nodeType === Node.ELEMENT_NODE && 
 						(node.classList?.contains('tabbrowser-tab') || node.tagName?.toLowerCase() === 'tab')) {
-						hasTabChanges = true;
-						break;
+						// Debounce the update to avoid excessive calls
+						if (updateTimeout) clearTimeout(updateTimeout);
+						updateTimeout = setTimeout(updateTabListeners, 100);
+						break outerLoop;
 					}
 				}
-				if (hasTabChanges) break;
-			}
-			
-			if (hasTabChanges) {
-				// Debounce the update to avoid excessive calls
-				if (updateTimeout) clearTimeout(updateTimeout);
-				updateTimeout = setTimeout(updateTabListeners, 100);
 			}
 		});
 
