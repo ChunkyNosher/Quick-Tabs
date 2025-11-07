@@ -2183,12 +2183,15 @@
 		console.log('QuickTabs: Tab hover detection set up');
 	}
 
-	// Map to store observers for each browser to prevent garbage collection
+	// Map to store mutation observers for each browser to prevent garbage collection
 	const browserObservers = new WeakMap();
 
-	// Set up link hover detection on web pages using message passing
+	// Set up link hover detection on web pages using DOM marker method
 	function setupLinkHoverDetection() {
 	    console.log('QuickTabs: Setting up link hover detection');
+	
+	    const MARKER_ID = 'quicktabs-hover-marker';
+	    const MARKER_ALREADY_INJECTED_ID = 'quicktabs-content-script-injected';
 	
 	    // Get the active browser element
 	    const getActiveBrowser = () => {
@@ -2202,110 +2205,256 @@
 	        return null;
 	    };
 	
-	    // Set up event listener on browser to detect link hovers
-	    const setupBrowserListener = (browser) => {
+	    // Inject content script and set up marker element
+	    const injectContentScript = (browser) => {
 	        if (!browser) {
 	            console.log('QuickTabs: No browser provided');
-	            return;
-	        }
-	
-	        // Check if we've already set up listeners for this browser
-	        if (browserObservers.has(browser)) {
-	            console.log('QuickTabs: Browser already has listeners');
-	            return;
+	            return false;
 	        }
 	
 	        try {
-	            // Add mouseover listener directly on the browser element
-	            const mouseoverHandler = (event) => {
-	                try {
-	                    // Get the event target from the content
-	                    const target = event.target;
-	                    
-	                    if (!target) return;
-	                    
-	                    // Walk up the DOM to find a link element
-	                    let element = target;
-	                    while (element && element !== event.currentTarget) {
-	                        if (element.tagName === 'A' || element.tagName === 'a') {
-	                            // Found a link element
-	                            const href = element.href || element.getAttribute('href');
-	                            if (href && href.trim() !== '' && !href.startsWith('javascript:')) {
-	                                hoveredLinkUrl = href;
-	                                hoveredLinkTitle = element.textContent?.trim() || 
-	                                                   element.title?.trim() || 
-	                                                   element.getAttribute('aria-label')?.trim() || 
-	                                                   href;
-	                                console.log('QuickTabs: Link hover detected:', hoveredLinkUrl);
+	            // Check if contentDocument is accessible
+	            if (!browser.contentDocument || !browser.contentDocument.documentElement) {
+	                console.log('QuickTabs: contentDocument not ready yet');
+	                return false;
+	            }
+	
+	            const contentDoc = browser.contentDocument;
+	
+	            // Wait for body to exist
+	            if (!contentDoc.body) {
+	                console.log('QuickTabs: Document body not ready, waiting...');
+	                return false;
+	            }
+	
+	            // Check if we've already injected on this page (avoid duplicates)
+	            if (contentDoc.getElementById(MARKER_ALREADY_INJECTED_ID)) {
+	                console.log('QuickTabs: Content script already injected on this page');
+	                return true; // Already injected, consider it success
+	            }
+	
+	            // Create marker element that chrome can observe
+	            let markerEl = contentDoc.getElementById(MARKER_ID);
+	            if (!markerEl) {
+	                markerEl = contentDoc.createElement('div');
+	                markerEl.id = MARKER_ID;
+	                markerEl.style.display = 'none';
+	                markerEl.style.pointerEvents = 'none';
+	                contentDoc.body.appendChild(markerEl);
+	                console.log('QuickTabs: Created marker element');
+	            }
+	
+	            // Create a flag to mark injection
+	            const injectionFlag = contentDoc.createElement('div');
+	            injectionFlag.id = MARKER_ALREADY_INJECTED_ID;
+	            injectionFlag.style.display = 'none';
+	            contentDoc.body.appendChild(injectionFlag);
+	
+	            // Inject the content script that will run in the page context
+	            const script = contentDoc.createElement('script');
+	            script.textContent = `
+	                (function() {
+	                    console.log('QuickTabs: Content script executing in page context');
+	
+	                    const MARKER_ID = 'quicktabs-hover-marker';
+	                    let currentHoveredLink = null;
+	
+	                    // Helper function to safely get link data
+	                    function getLinkData(link) {
+	                        return {
+	                            url: link.href || '',
+	                            title: (link.textContent?.trim() || 
+	                                   link.title?.trim() || 
+	                                   link.getAttribute('aria-label')?.trim() || 
+	                                   link.href || '')
+	                        };
+	                    }
+	
+	                    // Main mouseover listener
+	                    document.addEventListener('mouseover', function(event) {
+	                        let target = event.target;
+	
+	                        // Walk up the DOM tree to find a link
+	                        while (target && target !== document.documentElement) {
+	                            if (target.tagName === 'A' && target.href) {
+	                                // Only update if hovering over a different link
+	                                if (currentHoveredLink !== target) {
+	                                    currentHoveredLink = target;
+	                                    const linkData = getLinkData(target);
+	                                    const marker = document.getElementById(MARKER_ID);
+	
+	                                    if (marker) {
+	                                        // Set attributes that chrome context can observe
+	                                        marker.setAttribute('data-hovered-url', linkData.url);
+	                                        marker.setAttribute('data-hovered-title', linkData.title);
+	                                        marker.setAttribute('data-state', 'hovering');
+	                                        console.log('QuickTabs: Link data set in marker:', linkData.url);
+	                                    }
+	                                }
+	                                return; // Stop walking up the tree
+	                            }
+	                            target = target.parentElement;
+	                        }
+	                    }, true); // Capture phase for better event handling
+	
+	                    // Mouseout listener to clear hover state
+	                    document.addEventListener('mouseout', function(event) {
+	                        let target = event.target;
+	
+	                        while (target && target !== document.documentElement) {
+	                            if (target.tagName === 'A' && target.href) {
+	                                // Check if we're actually leaving the link
+	                                if (!event.relatedTarget || !target.contains(event.relatedTarget)) {
+	                                    if (currentHoveredLink !== null) {
+	                                        currentHoveredLink = null;
+	                                        const marker = document.getElementById(MARKER_ID);
+	                                        if (marker) {
+	                                            marker.removeAttribute('data-hovered-url');
+	                                            marker.removeAttribute('data-hovered-title');
+	                                            marker.setAttribute('data-state', 'idle');
+	                                            console.log('QuickTabs: Link hover cleared');
+	                                        }
+	                                    }
+	                                }
 	                                return;
 	                            }
+	                            target = target.parentElement;
 	                        }
-	                        element = element.parentElement;
-	                    }
-	                } catch (e) {
-	                    // Security errors can happen when accessing cross-origin content
-	                    // Just ignore them
-	                }
-	            };
+	                    }, true);
 	
-	            const mouseoutHandler = (event) => {
+	                    console.log('QuickTabs: Content script listeners attached successfully');
+	                })();
+	            `;
+	
+	            contentDoc.body.appendChild(script);
+	            // Remove the script tag after execution completes
+	            setTimeout(() => {
 	                try {
-	                    const target = event.target;
-	                    if (!target) return;
-	                    
-	                    // Walk up to find a link
-	                    let element = target;
-	                    while (element && element !== event.currentTarget) {
-	                        if (element.tagName === 'A' || element.tagName === 'a') {
-	                            // Check if we're actually leaving the link
-	                            if (!event.relatedTarget || !element.contains(event.relatedTarget)) {
-	                                hoveredLinkUrl = null;
-	                                hoveredLinkTitle = null;
-	                                console.log('QuickTabs: Link hover cleared');
-	                            }
-	                            return;
-	                        }
-	                        element = element.parentElement;
-	                    }
+	                    script.remove();
 	                } catch (e) {
-	                    // Ignore security errors
+	                    // Script may have already been removed
 	                }
-	            };
+	            }, 100);
 	
-	            // Add event listeners to the browser
-	            browser.addEventListener('mouseover', mouseoverHandler, true);
-	            browser.addEventListener('mouseout', mouseoutHandler, true);
-	
-	            // Store handlers in WeakMap to prevent garbage collection and allow cleanup
-	            browserObservers.set(browser, {
-	                mouseover: mouseoverHandler,
-	                mouseout: mouseoutHandler
-	            });
-	
-	            console.log('QuickTabs: Browser event listeners set up');
+	            console.log('QuickTabs: Content script injected and executed');
+	            return true;
 	
 	        } catch (e) {
-	            console.warn('QuickTabs: Error setting up browser listeners:', e);
+	            console.warn('QuickTabs: Error injecting content script:', e);
+	            return false;
 	        }
 	    };
 	
-	    // Set up listeners on currently active browser
+	    // Set up mutation observer on marker element to detect changes
+	    const setupMarkerObserver = (browser) => {
+	        if (!browser) {
+	            console.log('QuickTabs: No browser provided for observer');
+	            return null;
+	        }
+	
+	        // Check if we already have an observer for this browser
+	        if (browserObservers.has(browser)) {
+	            console.log('QuickTabs: Observer already exists for this browser');
+	            return browserObservers.get(browser);
+	        }
+	
+	        try {
+	            if (!browser.contentDocument || !browser.contentDocument.body) {
+	                console.log('QuickTabs: Cannot set up observer - contentDocument not ready');
+	                return null;
+	            }
+	
+	            const contentDoc = browser.contentDocument;
+	            let markerEl = contentDoc.getElementById(MARKER_ID);
+	
+	            if (!markerEl) {
+	                console.log('QuickTabs: Marker element not found for observer');
+	                return null;
+	            }
+	
+	            // Observe attribute changes on the marker element
+	            const observer = new MutationObserver((mutations) => {
+	                mutations.forEach((mutation) => {
+	                    if (mutation.type === 'attributes' && 
+	                        mutation.target.id === MARKER_ID) {
+	                        
+	                        // Read the current attribute values
+	                        const url = markerEl.getAttribute('data-hovered-url');
+	                        const title = markerEl.getAttribute('data-hovered-title');
+	                        const state = markerEl.getAttribute('data-state');
+	
+	                        if (state === 'hovering' && url) {
+	                            hoveredLinkUrl = url;
+	                            hoveredLinkTitle = title || url;
+	                            console.log('QuickTabs: Link hover detected via marker:', url);
+	                        } else if (state === 'idle') {
+	                            hoveredLinkUrl = null;
+	                            hoveredLinkTitle = null;
+	                            console.log('QuickTabs: Link unhovered via marker');
+	                        }
+	                    }
+	                });
+	            });
+	
+	            // Observe attribute changes
+	            observer.observe(markerEl, {
+	                attributes: true,
+	                attributeFilter: ['data-hovered-url', 'data-hovered-title', 'data-state'],
+	                attributeOldValue: true
+	            });
+	
+	            // Store observer in WeakMap to prevent garbage collection
+	            browserObservers.set(browser, observer);
+	
+	            console.log('QuickTabs: Marker observer set up and stored');
+	            return observer;
+	
+	        } catch (e) {
+	            console.warn('QuickTabs: Error setting up marker observer:', e);
+	            return null;
+	        }
+	    };
+	
+	    // Setup function that tries injection and observer
+	    const setupForBrowser = (browser) => {
+	        if (!browser) return;
+	
+	        const injected = injectContentScript(browser);
+	        if (injected) {
+	            // Small delay to ensure marker element is created
+	            setTimeout(() => {
+	                setupMarkerObserver(browser);
+	            }, 50);
+	        } else {
+	            // If injection failed, try again after a delay
+	            setTimeout(() => {
+	                const retryInjected = injectContentScript(browser);
+	                if (retryInjected) {
+	                    setTimeout(() => {
+	                        setupMarkerObserver(browser);
+	                    }, 50);
+	                }
+	            }, 500);
+	        }
+	    };
+	
+	    // Inject into currently active browser
 	    const activeBrowser = getActiveBrowser();
 	    if (activeBrowser) {
-	        setupBrowserListener(activeBrowser);
+	        setupForBrowser(activeBrowser);
 	    }
 	
-	    // When tab switches, set up listeners on new browser
+	    // When tab switches, re-inject script
 	    try {
 	        if (typeof gBrowser !== 'undefined') {
 	            gBrowser.tabContainer.addEventListener('TabSelect', (event) => {
-	                console.log('QuickTabs: Tab switched, setting up listeners for new tab');
+	                console.log('QuickTabs: Tab switched, setting up for new tab');
 	                hoveredLinkUrl = null;
 	                hoveredLinkTitle = null;
 	
 	                const newActiveBrowser = getActiveBrowser();
 	                if (newActiveBrowser) {
-	                    setupBrowserListener(newActiveBrowser);
+	                    setupForBrowser(newActiveBrowser);
 	                }
 	            });
 	        }
@@ -2313,22 +2462,21 @@
 	        console.warn('QuickTabs: Could not set up tab switch listener:', e);
 	    }
 	
-	    // Set up listeners when new tabs are opened
+	    // Re-inject when page loads
 	    try {
 	        if (typeof gBrowser !== 'undefined') {
-	            gBrowser.tabContainer.addEventListener('TabOpen', (event) => {
-	                console.log('QuickTabs: New tab opened, setting up listeners');
-	                const tab = event.target;
-	                if (tab && tab.linkedBrowser) {
-	                    // Small delay to ensure browser is ready
-	                    setTimeout(() => {
-	                        setupBrowserListener(tab.linkedBrowser);
-	                    }, 100);
+	            gBrowser.addEventListener('DOMContentLoaded', (event) => {
+	                if (event.target && event.target.defaultView) {
+	                    console.log('QuickTabs: Page DOM loaded, setting up detection');
+	                    const browser = gBrowser.getBrowserForDocument(event.target);
+	                    if (browser && browser === gBrowser.selectedBrowser) {
+	                        setupForBrowser(browser);
+	                    }
 	                }
-	            });
+	            }, true);
 	        }
 	    } catch (e) {
-	        console.warn('QuickTabs: Could not set up tab open listener:', e);
+	        console.warn('QuickTabs: Could not set up page load listener:', e);
 	    }
 	
 	    console.log('QuickTabs: Link hover detection setup complete');
