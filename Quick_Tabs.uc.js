@@ -2115,7 +2115,15 @@
 
 		// Get all individual tab elements and add listeners to each
 		const updateTabListeners = () => {
-			const tabs = tabBar.querySelectorAll('.tabbrowser-tab, tab[class*="tabbrowser-tab"]');
+			// Try multiple selectors to find tab elements across different Firefox/Zen Browser versions
+			const tabs = tabBar.querySelectorAll('.tabbrowser-tab, tab[class*="tabbrowser-tab"], tab');
+			
+			if (tabs.length === 0) {
+				console.warn('QuickTabs: No tab elements found in tab bar');
+				return;
+			}
+			
+			console.log('QuickTabs: Found', tabs.length, 'tab elements');
 			
 			tabs.forEach(tab => {
 				// Avoid adding multiple listeners
