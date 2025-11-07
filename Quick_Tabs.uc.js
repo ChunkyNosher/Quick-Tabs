@@ -13,6 +13,8 @@
     const QUICK_TABS_CLOSE_SOURCE_TAB_PREF = "extensions.quicktabs.closeSourceTab";
     const QUICK_TABS_CMD_PALETTE_DYNAMIC_PREF = "extensions.quicktabs.commandpalette.dynamic.enabled";
     const QUICK_TABS_INITIAL_POSITION_PREF = "extensions.quicktabs.initialPosition";
+	const QUICK_TABS_KEYBOARD_SHORTCUT_PREF = "extensions.quicktabs.keyboard_shortcut";
+
 
     // Configuration helper functions
     const getPref = (prefName, defaultValue = "") => {
@@ -60,6 +62,8 @@
     const ANIMATIONS_ENABLED = getPref(QUICK_TABS_ANIMATIONS_ENABLED_PREF, true);
     const CLOSE_SOURCE_TAB = getPref(QUICK_TABS_CLOSE_SOURCE_TAB_PREF, false);
     const INITIAL_POSITION = getPref(QUICK_TABS_INITIAL_POSITION_PREF, "center"); // e.g., center, top-left, bottom-right
+	const KEYBOARD_SHORTCUT = getPref(QUICK_TABS_KEYBOARD_SHORTCUT_PREF, "Control+E");
+
     
     // Global state
     let quickTabContainers = new Map(); // id -> container info
@@ -67,6 +71,8 @@
     let taskbarExpanded = false;
     let commandListenerAdded = false;
     let wasExpandedForDrag = false;
+	let hoveredTab = null; // Track the currently hovered tab
+
 
     // Quick Tab command state for passing parameters
     let quickTabCommandData = {
@@ -1978,6 +1984,9 @@
         addContextMenuItem();
         addTabContextMenuItem();
         setupCommandPaletteIntegration();
+		setupTabHoverDetection();
+		setupKeyboardShortcuts();
+
 
         // Global dragenter listener to show taskbar for drops
         document.addEventListener('dragenter', (event) => {
@@ -2094,6 +2103,163 @@
             console.error('QuickTabs: Error opening Quick Tab from current tab:', e);
         }
     }
+
+	function setupTabHoverDetection() {
+		const tabBar = document.getElementById('tabbrowser-tabs');
+  
+		if (!tabBar) {
+			console.log('QuickTabs: Tab bar not found, retrying in 500ms');
+			setTimeout(setupTabHoverDetection, 500);
+			return;
+		}
+
+		// Get all individual tab elements
+		tabBar.addEventListener('mouseover', (event) => {
+			const tab = event.target.closest('tab');
+			if (tab) {
+				hoveredTab = tab;
+				console.log('QuickTabs: Tab hovered detected');
+			}
+		});
+
+		tabBar.addEventListener('mouseout', (event) => {
+			const tab = event.target.closest('tab');
+			if (tab === hoveredTab) {
+				hoveredTab = null;
+				console.log('QuickTabs: Tab hover ended');
+			}
+		});
+
+		console.log('QuickTabs: Tab hover detection set up');
+	}
+
+	// Parse keyboard shortcut strings like "Control+E", "Shift+Alt+T", etc.
+	function parseKeyboardShortcut(shortcutString) {
+		if (!shortcutString || shortcutString.trim() === '') {
+			console.warn('QuickTabs: Invalid shortcut string:', shortcutString);
+			return null;
+		}
+
+		const parts = shortcutString.split('+').map(p => p.trim());
+
+		return {
+			ctrlKey: parts.some(p => p.toLowerCase() === 'control' || p.toLowerCase() === 'ctrl'),
+			shiftKey: parts.some(p => p.toLowerCase() === 'shift'),
+			altKey: parts.some(p => p.toLowerCase() === 'alt'),
+			metaKey: parts.some(p => p.toLowerCase() === 'meta' || p.toLowerCase() === 'cmd'),
+			key: parts[parts.length - 1].toLowerCase() // Last part is the actual key
+		};
+	}
+
+	// Set up keyboard shortcuts
+	function setupKeyboardShortcuts() {
+		const shortcutConfig = parseKeyboardShortcut(KEYBOARD_SHORTCUT);
+
+		if (!shortcutConfig) {
+			console.warn('QuickTabs: Failed to parse keyboard shortcut:', KEYBOARD_SHORTCUT);
+			return;
+		}
+
+		console.log('QuickTabs: Keyboard shortcut config:', {
+			ctrl: shortcutConfig.ctrlKey,
+			shift: shortcutConfig.shiftKey,
+			alt: shortcutConfig.altKey,
+			meta: shortcutConfig.metaKey,
+			key: shortcutConfig.key
+		});
+
+		document.addEventListener('keydown', (event) => {
+			// Check if the pressed key combination matches our shortcut
+			const isMatch =
+				event.ctrlKey === shortcutConfig.ctrlKey &&
+				event.shiftKey === shortcutConfig.shiftKey &&
+				event.altKey === shortcutConfig.altKey &&
+				event.metaKey === shortcutConfig.metaKey &&
+				event.key.toLowerCase() === shortcutConfig.key;
+
+			if (isMatch) {
+				event.preventDefault();
+				event.stopPropagation();
+				console.log('QuickTabs: Shortcut triggered!');
+				handleHoveredTabQuickOpen();
+			}
+		}, true); // Use capture phase
+
+		console.log('QuickTabs: Keyboard shortcuts set up with:', KEYBOARD_SHORTCUT);
+	}
+
+	// Handle opening a Quick Tab from the hovered tab
+	function handleHoveredTabQuickOpen() {
+		if (!hoveredTab) {
+			console.warn('QuickTabs: No hovered tab available');
+			showNotification('No tab hovered - move your mouse over a tab first', 'warning');
+			return;
+		}
+
+		try {
+			const tabData = getTabData(hoveredTab);
+
+			if (!tabData.url || tabData.url === 'about:blank') {
+				console.warn('QuickTabs: Hovered tab has no valid URL:', tabData.url);
+				showNotification('Tab has no valid URL', 'warning');
+				return;
+			}
+
+			console.log('QuickTabs: Opening Quick Tab from hovered tab:', {
+				url: tabData.url,
+				title: tabData.title
+			});
+
+			const containerInfo = createQuickTabContainer(tabData.url, tabData.title);
+
+			if (containerInfo) {
+				showNotification('Quick Tab opened: ' + truncateText(tabData.title, 30), 'success');
+			} else {
+				showNotification('Failed to create Quick Tab', 'error');
+			}
+
+		} catch (error) {
+			console.error('QuickTabs: Error opening Quick Tab from hovered tab:', error);
+			showNotification('Error opening Quick Tab', 'error');
+		}
+	}
+
+	// Show notification to user
+	function showNotification(message, type = 'success') {
+		const colors = {
+			success: '#4CAF50',
+			warning: '#FF9800',
+			error: '#F44336'
+		};
+
+		const notification = document.createElement('div');
+		notification.style.cssText = `
+			position: fixed;
+			top: 20px;
+			left: 50%;
+			transform: translateX(-50%);
+			z-index: 10003;
+			background: ${colors[type] || colors.success};
+			color: white;
+			padding: 12px 20px;
+			border-radius: 6px;
+			font-size: 14px;
+			font-weight: 500;
+			box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+			max-width: 400px;
+			word-wrap: break-word;
+		`;
+		notification.textContent = message;
+		document.body.appendChild(notification);
+
+		setTimeout(() => {
+			notification.style.opacity = '0';
+			notification.style.transition = 'opacity 0.3s ease';
+			setTimeout(() => notification.remove(), 300);
+		}, 3000);
+	}
+
 
     // Public API functions for other scripts to use
     window.QuickTabs = {
