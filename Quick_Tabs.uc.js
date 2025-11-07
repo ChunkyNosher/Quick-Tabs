@@ -2187,6 +2187,10 @@
 	function setupLinkHoverDetection() {
 		console.log('QuickTabs: Setting up link hover detection');
 
+		// Constants for timing delays
+		const TAB_SWITCH_DELAY_MS = 100;
+		const PAGE_LOAD_DELAY_MS = 200;
+
 		const getActiveBrowser = () => {
 			try {
 				if (typeof gBrowser !== 'undefined' && gBrowser.selectedBrowser) {
@@ -2198,6 +2202,21 @@
 			return null;
 		};
 
+		// Listen for custom events from content script
+		const handleContentScriptEvent = (event) => {
+			if (event.detail) {
+				hoveredLinkUrl = event.detail.url;
+				hoveredLinkTitle = event.detail.title;
+				console.log('QuickTabs: Link hover detected from content script:', hoveredLinkUrl);
+			}
+		};
+
+		const handleUnhoverEvent = (event) => {
+			hoveredLinkUrl = null;
+			hoveredLinkTitle = null;
+			console.log('QuickTabs: Link unhovered');
+		};
+
 		// Inject content script into browser
 		const injectContentScript = (browser) => {
 			if (!browser || !browser.contentWindow) {
@@ -2206,6 +2225,17 @@
 			}
 
 			try {
+				// Set up event listeners on the browser's contentWindow
+				const contentWindow = browser.contentWindow;
+				
+				// Remove any existing listeners to avoid duplicates
+				contentWindow.removeEventListener('quicktabs-link-hover', handleContentScriptEvent);
+				contentWindow.removeEventListener('quicktabs-link-unhover', handleUnhoverEvent);
+				
+				// Add listeners for custom events from the injected script
+				contentWindow.addEventListener('quicktabs-link-hover', handleContentScriptEvent);
+				contentWindow.addEventListener('quicktabs-link-unhover', handleUnhoverEvent);
+				
 				// Create a script element that will run in page context
 				const script = browser.contentDocument.createElement('script');
 				
@@ -2286,25 +2316,6 @@
 			}
 		};
 
-		// Listen for custom events from content script
-		const handleContentScriptEvent = (event) => {
-			if (event.detail) {
-				hoveredLinkUrl = event.detail.url;
-				hoveredLinkTitle = event.detail.title;
-				console.log('QuickTabs: Link hover detected from content script:', hoveredLinkUrl);
-			}
-		};
-
-		const handleUnhoverEvent = (event) => {
-			hoveredLinkUrl = null;
-			hoveredLinkTitle = null;
-			console.log('QuickTabs: Link unhovered');
-		};
-
-		// Set up listeners for custom events from injected script
-		document.addEventListener('quicktabs-link-hover', handleContentScriptEvent);
-		document.addEventListener('quicktabs-link-unhover', handleUnhoverEvent);
-
 		// Inject into currently active browser
 		const activeBrowser = getActiveBrowser();
 		if (activeBrowser) {
@@ -2322,7 +2333,7 @@
 					const newActiveBrowser = getActiveBrowser();
 					if (newActiveBrowser) {
 						// Small delay to ensure content is ready
-						setTimeout(() => injectContentScript(newActiveBrowser), 100);
+						setTimeout(() => injectContentScript(newActiveBrowser), TAB_SWITCH_DELAY_MS);
 					}
 				});
 			}
@@ -2334,11 +2345,11 @@
 		try {
 			if (typeof gBrowser !== 'undefined') {
 				gBrowser.addEventListener('load', (event) => {
-					if (event.target && event.target.contentDocument) {
+					if (event.target && event.target.defaultView) {
 						console.log('QuickTabs: Page loaded, re-injecting script');
 						const browser = gBrowser.getBrowserForDocument(event.target);
 						if (browser) {
-							setTimeout(() => injectContentScript(browser), 200);
+							setTimeout(() => injectContentScript(browser), PAGE_LOAD_DELAY_MS);
 						}
 					}
 				}, true);
