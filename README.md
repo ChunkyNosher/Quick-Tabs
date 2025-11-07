@@ -2,6 +2,8 @@
 
 A user script that allows you to open links in floating tab containers directly within the Zen browser.
 
+> 🚀 **New!** Hover over any link on YouTube, Twitter, Reddit, GitHub, and 100+ more sites and press **Ctrl+E** to instantly open it in a Quick Tab!  
+> 📖 See [Quick Start Guide](./QUICKSTART.md) for 5-minute setup
 
 
 https://github.com/user-attachments/assets/fdbda5ac-aa4b-448e-b1df-56f4f1a79f0b
@@ -30,10 +32,11 @@ Quick Tabs provides a unique way to browse multiple websites simultaneously with
 - **Zen Command Palette Integration**:
   - Access Quick Tabs commands (e.g., close all, minimize all, expand/minimize specific tabs) directly from the [Zen Command Palette](https://github.com/BibekBhusal0/zen-custom-js).
 - **Copy-URL Extension Integration**:
-  - Works seamlessly with the [Copy-URL-on-Hover Firefox Extension](https://github.com/Vinfall/copy-url-on-hover) to detect hovered links on web pages
+  - Works seamlessly with the [Copy-URL-on-Hover Firefox Extension](https://github.com/ChunkyNosher/copy-URL-on-hover_ChunkyEdition) to detect hovered links on web pages
   - Press Ctrl+E (customizable) while hovering over any link to instantly open it in a Quick Tab
   - Leverages the extension's comprehensive link detection across 100+ websites including YouTube, Twitter, GitHub, Reddit, and more
   - Falls back to built-in tab hover detection if the extension is not installed
+  - See [Quick Start Guide](./QUICKSTART.md) for setup instructions
 - **Quick Search Integration (Coming Soon)**:
   - Open the Quick Search result in a Quick Tab
 
@@ -77,12 +80,17 @@ OR
 
 For enhanced link detection across websites like YouTube, Twitter, Reddit, and 100+ more:
 
-> **⚠️ Important**: The Copy-URL-on-Hover extension requires modifications to work with Quick Tabs. See the [Extension Modifications](#extension-modifications-required) section below for detailed instructions.
+> **⚠️ Important**: The Copy-URL-on-Hover extension requires modifications to work with Quick Tabs. 
+> 
+> 📖 **See**: 
+> - [Integration Guide](./COPY_URL_INTEGRATION_GUIDE.md) - How to modify the extension
+> - [Testing Guide](./TESTING_GUIDE.md) - How to verify it works correctly
 
 1. **Install and Modify the Extension**:
-   - Download [Copy-URL-on-Hover](https://github.com/Vinfall/copy-url-on-hover) source code
-   - Apply the modifications described in the [Extension Modifications](#extension-modifications-required) section
+   - Download [Copy-URL-on-Hover](https://github.com/ChunkyNosher/copy-URL-on-hover_ChunkyEdition) source code
+   - Follow the [Integration Guide](./COPY_URL_INTEGRATION_GUIDE.md) to apply modifications
    - Load the modified extension in Firefox (about:debugging → Load Temporary Add-on)
+   - Use the [Testing Guide](./TESTING_GUIDE.md) to verify everything works
 
 2. **How It Works**:
    - The modified extension creates a hidden marker element (`quicktabs-link-marker`) in each web page
@@ -177,125 +185,25 @@ The integration uses a **DOM marker bridge** approach:
 
 ### Extension Modifications Required
 
-To enable Quick Tabs integration, the Copy-URL-on-Hover extension needs to be modified to create and update the DOM marker element. Here's what needs to be added to the extension's `content.js` file:
+> **⚠️ Important**: The Copy-URL-on-Hover extension requires modifications to work with Quick Tabs. 
 
-#### Step 1: Add Quick Tabs Integration Code
+📖 **See the [Copy-URL Integration Guide](./COPY_URL_INTEGRATION_GUIDE.md) for complete step-by-step instructions.**
 
-Add this code to `content.js` (around line 80, after the CONFIG initialization):
+The integration guide includes:
+- Detailed code modifications for the extension's `content.js` file
+- Complete testing procedures
+- Troubleshooting tips
+- Code examples
 
-```javascript
-// ============================================================
-// QUICK TABS INTEGRATION - DOM Marker Bridge
-// ============================================================
+#### Quick Summary
 
-const QUICKTABS_MARKER_ID = 'quicktabs-link-marker';
-let quickTabsMarker = null;
+The extension needs three simple modifications:
 
-// Create marker element for Quick Tabs communication
-function initQuickTabsMarker() {
-    // Check if marker already exists
-    quickTabsMarker = document.getElementById(QUICKTABS_MARKER_ID);
-    
-    if (!quickTabsMarker) {
-        quickTabsMarker = document.createElement('div');
-        quickTabsMarker.id = QUICKTABS_MARKER_ID;
-        quickTabsMarker.style.display = 'none';
-        quickTabsMarker.style.pointerEvents = 'none';
-        
-        // Append to body when it's available
-        if (document.body) {
-            document.body.appendChild(quickTabsMarker);
-            console.log('CopyURL: Quick Tabs marker created');
-        } else {
-            // Wait for DOM to be ready
-            document.addEventListener('DOMContentLoaded', () => {
-                document.body.appendChild(quickTabsMarker);
-                console.log('CopyURL: Quick Tabs marker created (DOMContentLoaded)');
-            });
-        }
-    }
-}
+1. **Add marker initialization code** (~60 lines) after the variable declarations
+2. **Update the mouseover handler** to call `updateQuickTabsMarker(url, title)` when a link is detected
+3. **Update the mouseout handler** to clear the marker with `updateQuickTabsMarker(null, null)`
 
-// Update Quick Tabs marker with current hovered link
-function updateQuickTabsMarker(url, title) {
-    if (!quickTabsMarker) {
-        initQuickTabsMarker();
-    }
-    
-    if (quickTabsMarker) {
-        if (url && url.trim() !== '') {
-            quickTabsMarker.setAttribute('data-hovered-url', url);
-            quickTabsMarker.setAttribute('data-hovered-title', title || url);
-            quickTabsMarker.setAttribute('data-state', 'hovering');
-            console.log('CopyURL: Updated Quick Tabs marker:', url);
-        } else {
-            quickTabsMarker.removeAttribute('data-hovered-url');
-            quickTabsMarker.removeAttribute('data-hovered-title');
-            quickTabsMarker.setAttribute('data-state', 'idle');
-            console.log('CopyURL: Cleared Quick Tabs marker');
-        }
-    }
-}
-
-// Initialize marker on load
-initQuickTabsMarker();
-
-// ============================================================
-// END QUICK TABS INTEGRATION
-// ============================================================
-```
-
-#### Step 2: Update Hover Detection
-
-Modify the existing `mouseover` event listener in `content.js` (around line 2400) to call `updateQuickTabsMarker()`:
-
-```javascript
-document.addEventListener('mouseover', function(event) {
-    let target = event.target;
-    let element = null;
-    const domainType = getDomainType();
-    
-    // ... existing code that finds the element and URL ...
-    
-    const url = findUrl(element, domainType);
-    if (url) {
-        currentHoveredLink = element;
-        currentHoveredElement = element;
-        
-        // ADD THIS LINE - Update Quick Tabs marker
-        updateQuickTabsMarker(url, getLinkText(element));
-        
-        debug(`${domainType}: URL found: ${url}`);
-    } else {
-        debug(`${domainType}: No URL found for element`);
-    }
-}, true);
-```
-
-#### Step 3: Clear Marker on Mouse Out
-
-Update the `mouseout` event listener in `content.js` (around line 2450):
-
-```javascript
-document.addEventListener('mouseout', function(event) {
-    currentHoveredLink = null;
-    currentHoveredElement = null;
-    
-    // ADD THIS LINE - Clear Quick Tabs marker
-    updateQuickTabsMarker(null, null);
-}, true);
-```
-
-#### Testing the Integration
-
-After making these changes:
-
-1. Load the modified extension in Firefox (about:debugging → Load Temporary Add-on)
-2. Open the browser console (Ctrl+Shift+J)
-3. Navigate to a website like YouTube
-4. Hover over a video link - you should see: `CopyURL: Updated Quick Tabs marker: https://youtube.com/...`
-5. Move mouse away - you should see: `CopyURL: Cleared Quick Tabs marker`
-6. With Quick Tabs installed, press Ctrl+E while hovering over a link to open it in a Quick Tab
+Once modified, the extension will create a hidden DOM marker element that Quick Tabs can observe to detect hovered links across 100+ websites
 
 ## API Reference
 
