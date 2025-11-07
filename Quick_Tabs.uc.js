@@ -2204,10 +2204,10 @@
 				while (target && target !== contentDoc) {
 					if (target.tagName === 'A' && target.href) {
 						hoveredLinkUrl = target.href;
-						// Get link text - try textContent, then title attribute, then alt, then empty string
-						hoveredLinkTitle = target.textContent?.trim() || 
-						                    target.title?.trim() || 
-						                    target.getAttribute('aria-label')?.trim() || '';
+						// Get link text - try textContent, then title attribute, then aria-label, then empty string
+						hoveredLinkTitle = (target.textContent?.trim() || 
+						                     target.title?.trim() || 
+						                     target.getAttribute('aria-label')?.trim() || '');
 						console.log('QuickTabs: Link hovered in content:', hoveredLinkUrl, 'Title:', hoveredLinkTitle);
 						return;
 					}
@@ -2240,7 +2240,16 @@
 			try {
 				const browser = gBrowser?.selectedBrowser;
 				if (browser) {
-					attachListenersToContent(browser);
+					// Check if the document is ready, otherwise wait for it
+					if (browser.contentDocument && browser.contentDocument.readyState === 'complete') {
+						attachListenersToContent(browser);
+					} else {
+						// Wait for the document to be ready
+						browser.addEventListener('DOMContentLoaded', function handler() {
+							browser.removeEventListener('DOMContentLoaded', handler);
+							attachListenersToContent(browser);
+						}, { once: true });
+					}
 				}
 			} catch (e) {
 				console.error('QuickTabs: Error setting up current browser:', e);
@@ -2257,15 +2266,15 @@
 			hoveredLinkUrl = null;
 			hoveredLinkTitle = null;
 			// Set up for the new tab
-			setTimeout(setupCurrentBrowser, 100);
+			setupCurrentBrowser();
 		});
 
 		// Listen for page loads to reattach listeners
-		gBrowser.addEventListener('load', (event) => {
-			// Only handle load events from the top-level document
+		gBrowser.addEventListener('DOMContentLoaded', (event) => {
+			// Only handle load events from the top-level document of the selected browser
 			if (event.target === gBrowser.selectedBrowser?.contentDocument) {
 				console.log('QuickTabs: Page loaded, setting up link detection');
-				setupCurrentBrowser();
+				attachListenersToContent(gBrowser.selectedBrowser);
 			}
 		}, true);
 
