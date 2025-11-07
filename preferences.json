@@ -135,9 +135,9 @@
   {
     "type": "string",
     "property": "extensions.quicktabs.keyboard_shortcut",
-    "label": "Keyboard shortcut to open Quick Tab over hovered tab",
+    "label": "Keyboard shortcut to open Quick Tab from hovered link or tab",
     "default": "Control+E",
     "restart": true,
-    "help": "Use format like: Control+E, Shift+Alt+T, Meta+K"
+    "help": "Use format like: Control+E, Shift+Alt+T, Meta+K. Works with links when Copy-URL extension is installed and modified."
   }
 ] 
