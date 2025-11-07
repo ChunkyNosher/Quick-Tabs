@@ -2415,26 +2415,27 @@
 	        }
 	    };
 	
-	    // Setup function that tries injection and observer
-	    const setupForBrowser = (browser) => {
+	    // Setup function that tries injection and observer with retry logic
+	    const setupForBrowser = (browser, retryCount = 0) => {
 	        if (!browser) return;
 	
+	        const MAX_RETRIES = 5;
 	        const injected = injectContentScript(browser);
+	        
 	        if (injected) {
 	            // Small delay to ensure marker element is created
 	            setTimeout(() => {
 	                setupMarkerObserver(browser);
 	            }, 50);
-	        } else {
-	            // If injection failed, try again after a delay
+	        } else if (retryCount < MAX_RETRIES) {
+	            // If injection failed, retry with exponential backoff
+	            const delay = 200 * Math.pow(2, retryCount); // 200ms, 400ms, 800ms, 1600ms, 3200ms
 	            setTimeout(() => {
-	                const retryInjected = injectContentScript(browser);
-	                if (retryInjected) {
-	                    setTimeout(() => {
-	                        setupMarkerObserver(browser);
-	                    }, 50);
-	                }
-	            }, 500);
+	                console.log(`QuickTabs: Retrying injection (attempt ${retryCount + 1}/${MAX_RETRIES})`);
+	                setupForBrowser(browser, retryCount + 1);
+	            }, delay);
+	        } else {
+	            console.warn('QuickTabs: Failed to inject after maximum retries');
 	        }
 	    };
 	
@@ -2462,18 +2463,47 @@
 	        console.warn('QuickTabs: Could not set up tab switch listener:', e);
 	    }
 	
-	    // Re-inject when page loads
+	    // Re-inject when pages load in any tab
 	    try {
 	        if (typeof gBrowser !== 'undefined') {
-	            gBrowser.addEventListener('DOMContentLoaded', (event) => {
-	                if (event.target && event.target.defaultView) {
-	                    console.log('QuickTabs: Page DOM loaded, setting up detection');
-	                    const browser = gBrowser.getBrowserForDocument(event.target);
-	                    if (browser && browser === gBrowser.selectedBrowser) {
-	                        setupForBrowser(browser);
+	            // Add progress listener to detect page loads
+	            const progressListener = {
+	                onLocationChange: function(aWebProgress, aRequest, aLocation, aFlags) {
+	                    // Page navigation occurred
+	                    if (aWebProgress.isTopLevel) {
+	                        const browser = gBrowser.getBrowserForWebProgress(aWebProgress);
+	                        if (browser) {
+	                            console.log('QuickTabs: Page navigation detected, setting up detection');
+	                            // Small delay to let page start loading
+	                            setTimeout(() => {
+	                                setupForBrowser(browser);
+	                            }, 100);
+	                        }
 	                    }
-	                }
-	            }, true);
+	                },
+	                onStateChange: function(aWebProgress, aRequest, aStateFlags, aStatus) {
+	                    // Check if document has finished loading
+	                    if (aStateFlags & Ci.nsIWebProgressListener.STATE_IS_DOCUMENT &&
+	                        aStateFlags & Ci.nsIWebProgressListener.STATE_STOP) {
+	                        const browser = gBrowser.getBrowserForWebProgress(aWebProgress);
+	                        if (browser) {
+	                            console.log('QuickTabs: Page load complete, ensuring detection is set up');
+	                            setupForBrowser(browser);
+	                        }
+	                    }
+	                },
+	                onProgressChange: function() {},
+	                onStatusChange: function() {},
+	                onSecurityChange: function() {},
+	                onContentBlockingEvent: function() {},
+	                QueryInterface: ChromeUtils.generateQI([
+	                    'nsIWebProgressListener',
+	                    'nsISupportsWeakReference'
+	                ])
+	            };
+	            
+	            gBrowser.addProgressListener(progressListener);
+	            console.log('QuickTabs: Progress listener added for page load detection');
 	        }
 	    } catch (e) {
 	        console.warn('QuickTabs: Could not set up page load listener:', e);
