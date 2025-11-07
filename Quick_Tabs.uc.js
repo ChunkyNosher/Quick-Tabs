@@ -2187,40 +2187,87 @@
 	function setupLinkHoverDetection() {
 		console.log('QuickTabs: Setting up link hover detection');
 
-		// Listen for mouseover events on the entire document to detect link hovers
-		document.addEventListener('mouseover', (event) => {
-			// Check if the target or any ancestor is a link
-			let target = event.target;
-			while (target && target !== document) {
-				if (target.tagName === 'A' && target.href) {
-					hoveredLinkUrl = target.href;
-					// Get link text - try textContent, then title attribute, then empty string
-					hoveredLinkTitle = target.textContent?.trim() || target.title?.trim() || '';
-					console.log('QuickTabs: Link hovered:', hoveredLinkUrl, 'Title:', hoveredLinkTitle);
-					return;
-				}
-				target = target.parentElement;
+		// Function to attach listeners to a specific content document
+		const attachListenersToContent = (browser) => {
+			if (!browser || !browser.contentDocument) {
+				console.log('QuickTabs: No content document available for browser');
+				return;
 			}
-		}, true); // Use capture phase
 
-		// Listen for mouseout events to clear the hovered link
-		document.addEventListener('mouseout', (event) => {
-			// Check if we're leaving a link
-			let target = event.target;
-			while (target && target !== document) {
-				if (target.tagName === 'A' && target.href) {
-					// Only clear if we're not moving to a child element
-					// relatedTarget can be null when leaving the document
-					if (!event.relatedTarget || !target.contains(event.relatedTarget)) {
-						hoveredLinkUrl = null;
-						hoveredLinkTitle = null;
-						console.log('QuickTabs: Link hover ended');
+			const contentDoc = browser.contentDocument;
+			console.log('QuickTabs: Attaching link hover listeners to content document');
+
+			// Listen for mouseover events to detect link hovers
+			contentDoc.addEventListener('mouseover', (event) => {
+				// Check if the target or any ancestor is a link
+				let target = event.target;
+				while (target && target !== contentDoc) {
+					if (target.tagName === 'A' && target.href) {
+						hoveredLinkUrl = target.href;
+						// Get link text - try textContent, then title attribute, then alt, then empty string
+						hoveredLinkTitle = target.textContent?.trim() || 
+						                    target.title?.trim() || 
+						                    target.getAttribute('aria-label')?.trim() || '';
+						console.log('QuickTabs: Link hovered in content:', hoveredLinkUrl, 'Title:', hoveredLinkTitle);
+						return;
 					}
-					return;
+					target = target.parentElement;
 				}
-				target = target.parentElement;
+			}, true); // Use capture phase
+
+			// Listen for mouseout events to clear the hovered link
+			contentDoc.addEventListener('mouseout', (event) => {
+				// Check if we're leaving a link
+				let target = event.target;
+				while (target && target !== contentDoc) {
+					if (target.tagName === 'A' && target.href) {
+						// Only clear if we're not moving to a child element
+						// relatedTarget can be null when leaving the document
+						if (!event.relatedTarget || !target.contains(event.relatedTarget)) {
+							hoveredLinkUrl = null;
+							hoveredLinkTitle = null;
+							console.log('QuickTabs: Link hover ended in content');
+						}
+						return;
+					}
+					target = target.parentElement;
+				}
+			}, true); // Use capture phase
+		};
+
+		// Function to set up listeners for the currently active browser
+		const setupCurrentBrowser = () => {
+			try {
+				const browser = gBrowser?.selectedBrowser;
+				if (browser) {
+					attachListenersToContent(browser);
+				}
+			} catch (e) {
+				console.error('QuickTabs: Error setting up current browser:', e);
 			}
-		}, true); // Use capture phase
+		};
+
+		// Set up listeners for the current tab
+		setupCurrentBrowser();
+
+		// Listen for tab switches to reattach listeners
+		gBrowser.tabContainer.addEventListener('TabSelect', () => {
+			console.log('QuickTabs: Tab selected, setting up link detection');
+			// Clear hovered link when switching tabs
+			hoveredLinkUrl = null;
+			hoveredLinkTitle = null;
+			// Set up for the new tab
+			setTimeout(setupCurrentBrowser, 100);
+		});
+
+		// Listen for page loads to reattach listeners
+		gBrowser.addEventListener('load', (event) => {
+			// Only handle load events from the top-level document
+			if (event.target === gBrowser.selectedBrowser?.contentDocument) {
+				console.log('QuickTabs: Page loaded, setting up link detection');
+				setupCurrentBrowser();
+			}
+		}, true);
 
 		console.log('QuickTabs: Link hover detection set up');
 	}
