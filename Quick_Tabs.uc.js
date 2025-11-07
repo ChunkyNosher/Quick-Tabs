@@ -2225,6 +2225,12 @@
 			}
 
 			try {
+				// Validate that contentDocument and documentElement exist
+				if (!browser.contentDocument || !browser.contentDocument.documentElement) {
+					console.log('QuickTabs: Content document or document element not available');
+					return;
+				}
+
 				// Set up event listeners on the browser's contentWindow
 				const contentWindow = browser.contentWindow;
 				
@@ -2277,7 +2283,7 @@
 								target = target.parentElement;
 							}
 							
-							// No link found
+							// No link found - only dispatch unhover if we were previously hovering a link
 							if (currentHoveredLink !== null) {
 								currentHoveredLink = null;
 								window.dispatchEvent(new CustomEvent('quicktabs-link-unhover'));
@@ -2291,8 +2297,11 @@
 							while (target && target !== document) {
 								if (target.tagName === 'A' && target.href) {
 									if (!event.relatedTarget || !target.contains(event.relatedTarget)) {
-										currentHoveredLink = null;
-										window.dispatchEvent(new CustomEvent('quicktabs-link-unhover'));
+										// Only dispatch unhover if we're actually hovering a link
+										if (currentHoveredLink !== null) {
+											currentHoveredLink = null;
+											window.dispatchEvent(new CustomEvent('quicktabs-link-unhover'));
+										}
 									}
 									return;
 								}
