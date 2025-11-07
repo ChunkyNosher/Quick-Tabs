@@ -2191,6 +2191,8 @@
 	    console.log('QuickTabs: Setting up link hover detection via extension marker');
 
 	    const MARKER_ID = 'quicktabs-link-marker';
+	    const POLLING_INTERVAL = 500; // Check every 500ms
+	    const MAX_RETRY_TIME = 10000; // Stop after 10 seconds
 
 	    // Get the active browser element
 	    const getActiveBrowser = () => {
@@ -2204,74 +2206,120 @@
 	        return null;
 	    };
 
+	    // Find marker with retry mechanism
+	    const findMarkerWithRetry = (browser, onSuccess, onTimeout) => {
+	        const startTime = Date.now();
+	        let intervalId = null;
+
+	        const checkForMarker = () => {
+	            // Check if we've exceeded the timeout
+	            if (Date.now() - startTime > MAX_RETRY_TIME) {
+	                console.log('QuickTabs: Marker detection timed out after', MAX_RETRY_TIME, 'ms');
+	                clearInterval(intervalId);
+	                if (onTimeout) onTimeout();
+	                return;
+	            }
+
+	            // Validate that we still have a valid contentDocument
+	            if (!browser || !browser.contentDocument) {
+	                console.log('QuickTabs: Cannot check for marker - no contentDocument');
+	                return; // Keep trying, document might load later
+	            }
+
+	            try {
+	                const contentDoc = browser.contentDocument;
+	                const markerEl = contentDoc.getElementById(MARKER_ID);
+
+	                if (markerEl) {
+	                    console.log('QuickTabs: Marker element found after', Date.now() - startTime, 'ms');
+	                    clearInterval(intervalId);
+	                    if (onSuccess) onSuccess(markerEl, contentDoc);
+	                } else {
+	                    console.log('QuickTabs: Marker not found yet, waiting...');
+	                }
+	            } catch (e) {
+	                console.warn('QuickTabs: Error checking for marker:', e);
+	            }
+	        };
+
+	        // Start polling
+	        intervalId = setInterval(checkForMarker, POLLING_INTERVAL);
+	        // Check immediately as well
+	        checkForMarker();
+
+	        return intervalId; // Return interval ID so it can be cleared if needed
+	    };
+
 	    // Set up mutation observer on the marker element
 	    const setupMarkerObserver = (browser) => {
-	        if (!browser || !browser.contentDocument) {
-	            console.log('QuickTabs: Cannot set up observer - no contentDocument');
-	            setTimeout(() => {
-	                const retryBrowser = getActiveBrowser();
-	                if (retryBrowser) {
-	                    setupMarkerObserver(retryBrowser);
-	                }
-	            }, 500);
+	        // Validate browser and contentDocument before proceeding
+	        if (!browser) {
+	            console.log('QuickTabs: Cannot set up observer - no browser');
 	            return;
 	        }
 
+	        // Check if this is a valid content tab (not about:blank, chrome://, etc.)
 	        try {
-	            const contentDoc = browser.contentDocument;
-	            
-	            // Wait for marker to exist (extension needs time to create it)
-	            const waitForMarker = () => {
-	                let markerEl = contentDoc.getElementById(MARKER_ID);
-
-	                if (!markerEl) {
-	                    console.log('QuickTabs: Marker not found yet, waiting...');
-	                    setTimeout(waitForMarker, 500);
-	                    return;
-	                }
-
-	                console.log('QuickTabs: Marker element found, setting up observer');
-
-	                // Observe attribute changes on the marker element
-	                const observer = new MutationObserver((mutations) => {
-	                    mutations.forEach((mutation) => {
-	                        if (mutation.type === 'attributes' && 
-	                            mutation.target.id === MARKER_ID) {
-	                            
-	                            // Read the current attribute values
-	                            const url = markerEl.getAttribute('data-hovered-url');
-	                            const title = markerEl.getAttribute('data-hovered-title');
-	                            const state = markerEl.getAttribute('data-state');
-
-	                            if (state === 'hovering' && url) {
-	                                hoveredLinkUrl = url;
-	                                hoveredLinkTitle = title || url;
-	                                console.log('QuickTabs: Link hover detected from extension:', url);
-	                            } else if (state === 'idle') {
-	                                hoveredLinkUrl = null;
-	                                hoveredLinkTitle = null;
-	                                console.log('QuickTabs: Link unhovered');
-	                            }
-	                        }
-	                    });
-	                });
-
-	                // Observe attribute changes
-	                observer.observe(markerEl, {
-	                    attributes: true,
-	                    attributeFilter: ['data-hovered-url', 'data-hovered-title', 'data-state'],
-	                    attributeOldValue: true
-	                });
-
-	                console.log('QuickTabs: Marker observer set up successfully');
-	            };
-
-	            // Start waiting for marker
-	            waitForMarker();
-
+	            const currentURI = browser.currentURI;
+	            if (currentURI && (currentURI.spec.startsWith('about:') || 
+	                              currentURI.spec.startsWith('chrome://') ||
+	                              currentURI.spec === '')) {
+	                console.log('QuickTabs: Skipping observer setup for non-content page:', currentURI.spec);
+	                return;
+	            }
 	        } catch (e) {
-	            console.warn('QuickTabs: Error setting up marker observer:', e);
+	            console.warn('QuickTabs: Could not check browser URI:', e);
 	        }
+
+	        // Use the retry mechanism to find the marker
+	        findMarkerWithRetry(
+	            browser,
+	            (markerEl, contentDoc) => {
+	                // Success callback - marker found, set up observer
+	                try {
+	                    console.log('QuickTabs: Setting up marker observer');
+
+	                    // Observe attribute changes on the marker element
+	                    const observer = new MutationObserver((mutations) => {
+	                        mutations.forEach((mutation) => {
+	                            if (mutation.type === 'attributes' && 
+	                                mutation.target.id === MARKER_ID) {
+	                                
+	                                // Read the current attribute values
+	                                const url = markerEl.getAttribute('data-hovered-url');
+	                                const title = markerEl.getAttribute('data-hovered-title');
+	                                const state = markerEl.getAttribute('data-state');
+
+	                                if (state === 'hovering' && url) {
+	                                    hoveredLinkUrl = url;
+	                                    hoveredLinkTitle = title || url;
+	                                    console.log('QuickTabs: Link hover detected from extension:', url);
+	                                } else if (state === 'idle') {
+	                                    hoveredLinkUrl = null;
+	                                    hoveredLinkTitle = null;
+	                                    console.log('QuickTabs: Link unhovered');
+	                                }
+	                            }
+	                        });
+	                    });
+
+	                    // Observe attribute changes
+	                    observer.observe(markerEl, {
+	                        attributes: true,
+	                        attributeFilter: ['data-hovered-url', 'data-hovered-title', 'data-state'],
+	                        attributeOldValue: true
+	                    });
+
+	                    console.log('QuickTabs: Marker observer set up successfully');
+	                } catch (e) {
+	                    console.error('QuickTabs: Error setting up marker observer:', e);
+	                }
+	            },
+	            () => {
+	                // Timeout callback - marker not found within timeout period
+	                console.log('QuickTabs: Marker not detected - extension may not be installed or page not supported');
+	            }
+	        );
 	    };
 
 	    // Set up observer for currently active browser
