@@ -77,12 +77,17 @@ OR
 
 For enhanced link detection across websites like YouTube, Twitter, Reddit, and 100+ more:
 
-> **⚠️ Important**: The Copy-URL-on-Hover extension requires modifications to work with Quick Tabs. See the [Extension Modifications](#extension-modifications-required) section below for detailed instructions.
+> **⚠️ Important**: The Copy-URL-on-Hover extension requires modifications to work with Quick Tabs. 
+> 
+> 📖 **See**: 
+> - [Integration Guide](./COPY_URL_INTEGRATION_GUIDE.md) - How to modify the extension
+> - [Testing Guide](./TESTING_GUIDE.md) - How to verify it works correctly
 
 1. **Install and Modify the Extension**:
-   - Download [Copy-URL-on-Hover](https://github.com/Vinfall/copy-url-on-hover) source code
-   - Apply the modifications described in the [Extension Modifications](#extension-modifications-required) section
+   - Download [Copy-URL-on-Hover](https://github.com/ChunkyNosher/copy-URL-on-hover_ChunkyEdition) source code
+   - Follow the [Integration Guide](./COPY_URL_INTEGRATION_GUIDE.md) to apply modifications
    - Load the modified extension in Firefox (about:debugging → Load Temporary Add-on)
+   - Use the [Testing Guide](./TESTING_GUIDE.md) to verify everything works
 
 2. **How It Works**:
    - The modified extension creates a hidden marker element (`quicktabs-link-marker`) in each web page
