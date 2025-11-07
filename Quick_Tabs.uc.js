@@ -2183,6 +2183,9 @@
 		console.log('QuickTabs: Tab hover detection set up');
 	}
 
+	// Map to store mutation observers for each browser to prevent garbage collection
+	const browserObservers = new WeakMap();
+
 	// Set up link hover detection on web pages using DOM marker method
 	function setupLinkHoverDetection() {
 	    console.log('QuickTabs: Setting up link hover detection');
@@ -2204,18 +2207,30 @@
 	
 	    // Inject content script and set up marker element
 	    const injectContentScript = (browser) => {
-	        if (!browser || !browser.contentDocument || !browser.contentDocument.documentElement) {
-	            console.log('QuickTabs: Browser or contentDocument not available');
-	            return;
+	        if (!browser) {
+	            console.log('QuickTabs: No browser provided');
+	            return false;
 	        }
 	
 	        try {
+	            // Check if contentDocument is accessible
+	            if (!browser.contentDocument || !browser.contentDocument.documentElement) {
+	                console.log('QuickTabs: contentDocument not ready yet');
+	                return false;
+	            }
+	
 	            const contentDoc = browser.contentDocument;
+	
+	            // Wait for body to exist
+	            if (!contentDoc.body) {
+	                console.log('QuickTabs: Document body not ready, waiting...');
+	                return false;
+	            }
 	
 	            // Check if we've already injected on this page (avoid duplicates)
 	            if (contentDoc.getElementById(MARKER_ALREADY_INJECTED_ID)) {
 	                console.log('QuickTabs: Content script already injected on this page');
-	                return;
+	                return true; // Already injected, consider it success
 	            }
 	
 	            // Create marker element that chrome can observe
@@ -2322,36 +2337,46 @@
 	            }, 100);
 	
 	            console.log('QuickTabs: Content script injected and executed');
+	            return true;
 	
 	        } catch (e) {
 	            console.warn('QuickTabs: Error injecting content script:', e);
+	            return false;
 	        }
 	    };
 	
 	    // Set up mutation observer on marker element to detect changes
 	    const setupMarkerObserver = (browser) => {
-	        if (!browser || !browser.contentDocument) {
-	            console.log('QuickTabs: Cannot set up observer - no contentDocument');
-	            return;
+	        if (!browser) {
+	            console.log('QuickTabs: No browser provided for observer');
+	            return null;
+	        }
+	
+	        // Check if we already have an observer for this browser
+	        if (browserObservers.has(browser)) {
+	            console.log('QuickTabs: Observer already exists for this browser');
+	            return browserObservers.get(browser);
 	        }
 	
 	        try {
+	            if (!browser.contentDocument || !browser.contentDocument.body) {
+	                console.log('QuickTabs: Cannot set up observer - contentDocument not ready');
+	                return null;
+	            }
+	
 	            const contentDoc = browser.contentDocument;
-	            let markerEl = contentDoc.getElementById('quicktabs-hover-marker');
+	            let markerEl = contentDoc.getElementById(MARKER_ID);
 	
 	            if (!markerEl) {
-	                console.log('QuickTabs: Marker element not found, creating one');
-	                markerEl = contentDoc.createElement('div');
-	                markerEl.id = 'quicktabs-hover-marker';
-	                markerEl.style.display = 'none';
-	                contentDoc.body.appendChild(markerEl);
+	                console.log('QuickTabs: Marker element not found for observer');
+	                return null;
 	            }
 	
 	            // Observe attribute changes on the marker element
 	            const observer = new MutationObserver((mutations) => {
 	                mutations.forEach((mutation) => {
 	                    if (mutation.type === 'attributes' && 
-	                        mutation.target.id === 'quicktabs-hover-marker') {
+	                        mutation.target.id === MARKER_ID) {
 	                        
 	                        // Read the current attribute values
 	                        const url = markerEl.getAttribute('data-hovered-url');
@@ -2378,7 +2403,10 @@
 	                attributeOldValue: true
 	            });
 	
-	            console.log('QuickTabs: Marker observer set up');
+	            // Store observer in WeakMap to prevent garbage collection
+	            browserObservers.set(browser, observer);
+	
+	            console.log('QuickTabs: Marker observer set up and stored');
 	            return observer;
 	
 	        } catch (e) {
@@ -2387,28 +2415,47 @@
 	        }
 	    };
 	
+	    // Setup function that tries injection and observer with retry logic
+	    const setupForBrowser = (browser, retryCount = 0) => {
+	        if (!browser) return;
+	
+	        const MAX_RETRIES = 5;
+	        const injected = injectContentScript(browser);
+	        
+	        if (injected) {
+	            // Small delay to ensure marker element is created
+	            setTimeout(() => {
+	                setupMarkerObserver(browser);
+	            }, 50);
+	        } else if (retryCount < MAX_RETRIES) {
+	            // If injection failed, retry with exponential backoff
+	            const delay = 200 * Math.pow(2, retryCount); // 200ms, 400ms, 800ms, 1600ms, 3200ms
+	            setTimeout(() => {
+	                console.log(`QuickTabs: Retrying injection (attempt ${retryCount + 1}/${MAX_RETRIES})`);
+	                setupForBrowser(browser, retryCount + 1);
+	            }, delay);
+	        } else {
+	            console.warn('QuickTabs: Failed to inject after maximum retries');
+	        }
+	    };
+	
 	    // Inject into currently active browser
 	    const activeBrowser = getActiveBrowser();
 	    if (activeBrowser) {
-	        injectContentScript(activeBrowser);
-	        setupMarkerObserver(activeBrowser);
+	        setupForBrowser(activeBrowser);
 	    }
 	
 	    // When tab switches, re-inject script
 	    try {
 	        if (typeof gBrowser !== 'undefined') {
 	            gBrowser.tabContainer.addEventListener('TabSelect', (event) => {
-	                console.log('QuickTabs: Tab switched, re-injecting content script');
+	                console.log('QuickTabs: Tab switched, setting up for new tab');
 	                hoveredLinkUrl = null;
 	                hoveredLinkTitle = null;
 	
 	                const newActiveBrowser = getActiveBrowser();
 	                if (newActiveBrowser) {
-	                    // Small delay to ensure content is ready
-	                    setTimeout(() => {
-	                        injectContentScript(newActiveBrowser);
-	                        setupMarkerObserver(newActiveBrowser);
-	                    }, 100);
+	                    setupForBrowser(newActiveBrowser);
 	                }
 	            });
 	        }
@@ -2416,21 +2463,47 @@
 	        console.warn('QuickTabs: Could not set up tab switch listener:', e);
 	    }
 	
-	    // Re-inject when page loads
+	    // Re-inject when pages load in any tab
 	    try {
 	        if (typeof gBrowser !== 'undefined') {
-	            gBrowser.addEventListener('load', (event) => {
-	                if (event.target && event.target.defaultView) {
-	                    console.log('QuickTabs: Page loaded, re-injecting script');
-	                    const browser = gBrowser.getBrowserForDocument(event.target);
-	                    if (browser) {
-	                        setTimeout(() => {
-	                            injectContentScript(browser);
-	                            setupMarkerObserver(browser);
-	                        }, 200);
+	            // Add progress listener to detect page loads
+	            const progressListener = {
+	                onLocationChange: function(aWebProgress, aRequest, aLocation, aFlags) {
+	                    // Page navigation occurred
+	                    if (aWebProgress.isTopLevel) {
+	                        const browser = gBrowser.getBrowserForWebProgress(aWebProgress);
+	                        if (browser) {
+	                            console.log('QuickTabs: Page navigation detected, setting up detection');
+	                            // Small delay to let page start loading
+	                            setTimeout(() => {
+	                                setupForBrowser(browser);
+	                            }, 100);
+	                        }
 	                    }
-	                }
-	            }, true);
+	                },
+	                onStateChange: function(aWebProgress, aRequest, aStateFlags, aStatus) {
+	                    // Check if document has finished loading
+	                    if (aStateFlags & Ci.nsIWebProgressListener.STATE_IS_DOCUMENT &&
+	                        aStateFlags & Ci.nsIWebProgressListener.STATE_STOP) {
+	                        const browser = gBrowser.getBrowserForWebProgress(aWebProgress);
+	                        if (browser) {
+	                            console.log('QuickTabs: Page load complete, ensuring detection is set up');
+	                            setupForBrowser(browser);
+	                        }
+	                    }
+	                },
+	                onProgressChange: function() {},
+	                onStatusChange: function() {},
+	                onSecurityChange: function() {},
+	                onContentBlockingEvent: function() {},
+	                QueryInterface: ChromeUtils.generateQI([
+	                    'nsIWebProgressListener',
+	                    'nsISupportsWeakReference'
+	                ])
+	            };
+	            
+	            gBrowser.addProgressListener(progressListener);
+	            console.log('QuickTabs: Progress listener added for page load detection');
 	        }
 	    } catch (e) {
 	        console.warn('QuickTabs: Could not set up page load listener:', e);
