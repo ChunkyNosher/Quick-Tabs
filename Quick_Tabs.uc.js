@@ -2147,9 +2147,22 @@
 		// Initial setup
 		updateTabListeners();
 
-		// Watch for new tabs being added
-		const observer = new MutationObserver(() => {
-			updateTabListeners();
+		// Watch for new tabs being added with debouncing
+		let updateTimeout = null;
+		const observer = new MutationObserver((mutations) => {
+			// Only update if we actually have tab-related changes
+			const hasTabChanges = mutations.some(mutation => 
+				Array.from(mutation.addedNodes).some(node => 
+					node.nodeType === Node.ELEMENT_NODE && 
+					(node.classList?.contains('tabbrowser-tab') || node.tagName?.toLowerCase() === 'tab')
+				)
+			);
+			
+			if (hasTabChanges) {
+				// Debounce the update to avoid excessive calls
+				if (updateTimeout) clearTimeout(updateTimeout);
+				updateTimeout = setTimeout(updateTabListeners, 100);
+			}
 		});
 
 		observer.observe(tabBar, {
