@@ -2104,6 +2104,9 @@
         }
     }
 
+	// WeakSet to track which tabs already have listeners
+	const tabsWithListeners = new WeakSet();
+
 	function setupTabHoverDetection() {
 		const tabBar = document.getElementById('tabbrowser-tabs');
   
@@ -2113,21 +2116,65 @@
 			return;
 		}
 
-		// Get all individual tab elements
-		tabBar.addEventListener('mouseover', (event) => {
-			const tab = event.target.closest('tab');
-			if (tab) {
-				hoveredTab = tab;
-				console.log('QuickTabs: Tab hovered detected');
+		// Get all individual tab elements and add listeners to each
+		const updateTabListeners = () => {
+			// Try multiple selectors to find tab elements across different Firefox/Zen Browser versions
+			let tabs = tabBar.querySelectorAll('.tabbrowser-tab');
+			if (tabs.length === 0) {
+				tabs = tabBar.querySelectorAll('tab');
+			}
+			
+			if (tabs.length === 0) {
+				console.warn('QuickTabs: No tab elements found in tab bar');
+				return;
+			}
+			
+			console.log('QuickTabs: Found', tabs.length, 'tab elements');
+			
+			// Use for...of loop for better performance
+			for (const tab of tabs) {
+				// Avoid adding multiple listeners using WeakSet
+				if (tabsWithListeners.has(tab)) continue;
+				tabsWithListeners.add(tab);
+				
+				tab.addEventListener('mouseenter', () => {
+					hoveredTab = tab;
+					console.log('QuickTabs: Tab hovered detected:', tab.getAttribute('label') || 'unlabeled');
+				});
+
+				tab.addEventListener('mouseleave', () => {
+					if (hoveredTab === tab) {
+						hoveredTab = null;
+						console.log('QuickTabs: Tab hover ended');
+					}
+				});
+			}
+		};
+
+		// Initial setup
+		updateTabListeners();
+
+		// Watch for new tabs being added with debouncing
+		let updateTimeout = null;
+		const observer = new MutationObserver((mutations) => {
+			// Only update if we actually have tab-related changes
+			// Use labeled break for better performance
+			outerLoop: for (const mutation of mutations) {
+				for (const node of mutation.addedNodes) {
+					if (node.nodeType === Node.ELEMENT_NODE && 
+						(node.classList?.contains('tabbrowser-tab') || node.tagName?.toLowerCase() === 'tab')) {
+						// Debounce the update to avoid excessive calls
+						if (updateTimeout) clearTimeout(updateTimeout);
+						updateTimeout = setTimeout(updateTabListeners, 100);
+						break outerLoop;
+					}
+				}
 			}
 		});
 
-		tabBar.addEventListener('mouseout', (event) => {
-			const tab = event.target.closest('tab');
-			if (tab === hoveredTab) {
-				hoveredTab = null;
-				console.log('QuickTabs: Tab hover ended');
-			}
+		observer.observe(tabBar, {
+			childList: true,
+			subtree: true
 		});
 
 		console.log('QuickTabs: Tab hover detection set up');
