@@ -73,6 +73,7 @@
     let wasExpandedForDrag = false;
 	let hoveredTab = null; // Track the currently hovered tab
 	let hoveredLinkUrl = null; // Track the currently hovered link URL
+	let hoveredLinkTitle = null; // Track the currently hovered link title
 
 
     // Quick Tab command state for passing parameters
@@ -2193,7 +2194,9 @@
 			while (target && target !== document) {
 				if (target.tagName === 'A' && target.href) {
 					hoveredLinkUrl = target.href;
-					console.log('QuickTabs: Link hovered:', hoveredLinkUrl);
+					// Get link text - try textContent, then title attribute, then empty string
+					hoveredLinkTitle = target.textContent?.trim() || target.title?.trim() || '';
+					console.log('QuickTabs: Link hovered:', hoveredLinkUrl, 'Title:', hoveredLinkTitle);
 					return;
 				}
 				target = target.parentElement;
@@ -2210,6 +2213,7 @@
 					// relatedTarget can be null when leaving the document
 					if (!event.relatedTarget || !target.contains(event.relatedTarget)) {
 						hoveredLinkUrl = null;
+						hoveredLinkTitle = null;
 						console.log('QuickTabs: Link hover ended');
 					}
 					return;
@@ -2283,7 +2287,7 @@
 			console.log('QuickTabs: Opening Quick Tab from hovered link:', hoveredLinkUrl);
 			
 			try {
-				const containerInfo = createQuickTabContainer(hoveredLinkUrl);
+				const containerInfo = createQuickTabContainer(hoveredLinkUrl, hoveredLinkTitle);
 				
 				if (containerInfo) {
 					showNotification('Quick Tab opened from link', 'success');
