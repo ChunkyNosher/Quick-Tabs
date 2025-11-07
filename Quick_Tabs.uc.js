@@ -2104,6 +2104,9 @@
         }
     }
 
+	// WeakSet to track which tabs already have listeners
+	const tabsWithListeners = new WeakSet();
+
 	function setupTabHoverDetection() {
 		const tabBar = document.getElementById('tabbrowser-tabs');
   
@@ -2116,7 +2119,10 @@
 		// Get all individual tab elements and add listeners to each
 		const updateTabListeners = () => {
 			// Try multiple selectors to find tab elements across different Firefox/Zen Browser versions
-			const tabs = tabBar.querySelectorAll('.tabbrowser-tab, tab[class*="tabbrowser-tab"], tab');
+			let tabs = tabBar.querySelectorAll('.tabbrowser-tab');
+			if (tabs.length === 0) {
+				tabs = tabBar.querySelectorAll('tab');
+			}
 			
 			if (tabs.length === 0) {
 				console.warn('QuickTabs: No tab elements found in tab bar');
@@ -2126,9 +2132,9 @@
 			console.log('QuickTabs: Found', tabs.length, 'tab elements');
 			
 			tabs.forEach(tab => {
-				// Avoid adding multiple listeners
-				if (tab.dataset.quickTabsListenerAdded) return;
-				tab.dataset.quickTabsListenerAdded = 'true';
+				// Avoid adding multiple listeners using WeakSet
+				if (tabsWithListeners.has(tab)) return;
+				tabsWithListeners.add(tab);
 				
 				tab.addEventListener('mouseenter', () => {
 					hoveredTab = tab;
@@ -2151,12 +2157,17 @@
 		let updateTimeout = null;
 		const observer = new MutationObserver((mutations) => {
 			// Only update if we actually have tab-related changes
-			const hasTabChanges = mutations.some(mutation => 
-				Array.from(mutation.addedNodes).some(node => 
-					node.nodeType === Node.ELEMENT_NODE && 
-					(node.classList?.contains('tabbrowser-tab') || node.tagName?.toLowerCase() === 'tab')
-				)
-			);
+			let hasTabChanges = false;
+			for (const mutation of mutations) {
+				for (const node of mutation.addedNodes) {
+					if (node.nodeType === Node.ELEMENT_NODE && 
+						(node.classList?.contains('tabbrowser-tab') || node.tagName?.toLowerCase() === 'tab')) {
+						hasTabChanges = true;
+						break;
+					}
+				}
+				if (hasTabChanges) break;
+			}
 			
 			if (hasTabChanges) {
 				// Debounce the update to avoid excessive calls
