@@ -2207,7 +2207,8 @@
 			while (target && target !== document) {
 				if (target.tagName === 'A' && target.href) {
 					// Only clear if we're not moving to a child element
-					if (!target.contains(event.relatedTarget)) {
+					// relatedTarget can be null when leaving the document
+					if (!event.relatedTarget || !target.contains(event.relatedTarget)) {
 						hoveredLinkUrl = null;
 						console.log('QuickTabs: Link hover ended');
 					}
