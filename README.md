@@ -2,6 +2,8 @@
 
 A user script that allows you to open links in floating tab containers directly within the Zen browser.
 
+> 🚀 **New!** Hover over any link on YouTube, Twitter, Reddit, GitHub, and 100+ more sites and press **Ctrl+E** to instantly open it in a Quick Tab!  
+> 📖 See [Quick Start Guide](./QUICKSTART.md) for 5-minute setup
 
 
 https://github.com/user-attachments/assets/fdbda5ac-aa4b-448e-b1df-56f4f1a79f0b
@@ -30,10 +32,11 @@ Quick Tabs provides a unique way to browse multiple websites simultaneously with
 - **Zen Command Palette Integration**:
   - Access Quick Tabs commands (e.g., close all, minimize all, expand/minimize specific tabs) directly from the [Zen Command Palette](https://github.com/BibekBhusal0/zen-custom-js).
 - **Copy-URL Extension Integration**:
-  - Works seamlessly with the [Copy-URL-on-Hover Firefox Extension](https://github.com/Vinfall/copy-url-on-hover) to detect hovered links on web pages
+  - Works seamlessly with the [Copy-URL-on-Hover Firefox Extension](https://github.com/ChunkyNosher/copy-URL-on-hover_ChunkyEdition) to detect hovered links on web pages
   - Press Ctrl+E (customizable) while hovering over any link to instantly open it in a Quick Tab
   - Leverages the extension's comprehensive link detection across 100+ websites including YouTube, Twitter, GitHub, Reddit, and more
   - Falls back to built-in tab hover detection if the extension is not installed
+  - See [Quick Start Guide](./QUICKSTART.md) for setup instructions
 - **Quick Search Integration (Coming Soon)**:
   - Open the Quick Search result in a Quick Tab
 
