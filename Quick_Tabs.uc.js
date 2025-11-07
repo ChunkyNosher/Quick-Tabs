@@ -2113,21 +2113,40 @@
 			return;
 		}
 
-		// Get all individual tab elements
-		tabBar.addEventListener('mouseover', (event) => {
-			const tab = event.target.closest('tab');
-			if (tab) {
-				hoveredTab = tab;
-				console.log('QuickTabs: Tab hovered detected');
-			}
+		// Get all individual tab elements and add listeners to each
+		const updateTabListeners = () => {
+			const tabs = tabBar.querySelectorAll('.tabbrowser-tab, tab[class*="tabbrowser-tab"]');
+			
+			tabs.forEach(tab => {
+				// Avoid adding multiple listeners
+				if (tab.dataset.quickTabsListenerAdded) return;
+				tab.dataset.quickTabsListenerAdded = 'true';
+				
+				tab.addEventListener('mouseenter', () => {
+					hoveredTab = tab;
+					console.log('QuickTabs: Tab hovered detected:', tab.getAttribute('label') || 'unlabeled');
+				});
+
+				tab.addEventListener('mouseleave', () => {
+					if (hoveredTab === tab) {
+						hoveredTab = null;
+						console.log('QuickTabs: Tab hover ended');
+					}
+				});
+			});
+		};
+
+		// Initial setup
+		updateTabListeners();
+
+		// Watch for new tabs being added
+		const observer = new MutationObserver(() => {
+			updateTabListeners();
 		});
 
-		tabBar.addEventListener('mouseout', (event) => {
-			const tab = event.target.closest('tab');
-			if (tab === hoveredTab) {
-				hoveredTab = null;
-				console.log('QuickTabs: Tab hover ended');
-			}
+		observer.observe(tabBar, {
+			childList: true,
+			subtree: true
 		});
 
 		console.log('QuickTabs: Tab hover detection set up');
