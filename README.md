@@ -155,55 +155,59 @@ extensions.quicktabs.keyboard_shortcut = "Control+E" // Keyboard shortcut to ope
 
 ## Integration with Copy-URL-on-Hover Extension
 
-Quick Tabs can integrate with the [Copy-URL-on-Hover Firefox Extension](https://github.com/Vinfall/copy-url-on-hover) to provide enhanced link detection across web pages.
+Quick Tabs integrates with the [Copy-URL-on-Hover Firefox Extension](https://github.com/ChunkyNosher/copy-URL-on-hover_ChunkyEdition) to provide enhanced link detection across web pages.
 
 ### How the Integration Works
 
-The integration uses a **DOM marker bridge** approach:
+The integration uses a **secure postMessage bridge** approach:
 
-1. **Extension Side**: Copy-URL-on-Hover creates a hidden marker element (`quicktabs-link-marker`) in each webpage
-2. **Extension Updates Marker**: When you hover over a link, the extension sets attributes on the marker:
-   - `data-hovered-url`: The detected link URL
-   - `data-hovered-title`: The link title or text
-   - `data-state`: Either `"hovering"` or `"idle"`
-3. **Quick Tabs Observes**: Quick Tabs uses a MutationObserver to watch for changes to the marker's attributes
-4. **Quick Tab Opens**: When you press Ctrl+E while hovering over a link, Quick Tabs reads the URL from the marker and opens it
+1. **Extension Side**: Copy-URL-on-Hover detects when you hover over a link and sends a secure postMessage to the browser chrome
+2. **Message Format**: The extension sends messages with type `QUICKTABS_URL_HOVER` containing:
+   - `url`: The detected link URL
+   - `title`: The link title or text
+   - `state`: Either `"hovering"` or `"idle"`
+3. **Quick Tabs Listens**: Quick Tabs listens for these postMessage events on the content window
+4. **Quick Tab Opens**: When you press Ctrl+E while hovering over a link, Quick Tabs reads the URL from the last received message and opens it
 
 ### Benefits
 
+- ✅ **Secure Communication**: Uses the recommended postMessage API for cross-context communication
 - ✅ **Leverages Extension's Link Detection**: Uses Copy-URL's 100+ website handlers (YouTube, Twitter, Reddit, GitHub, etc.)
-- ✅ **No Code Duplication**: Quick Tabs doesn't need to reimplement link detection
-- ✅ **Automatic Updates**: Benefits from Copy-URL extension updates
+- ✅ **No DOM Pollution**: No marker elements created in web pages
+- ✅ **Better Performance**: Event-driven, no polling or DOM manipulation required
 - ✅ **Graceful Fallback**: Still works with tab hover detection if extension is not installed
 
 ### Technical Details
 
-- **Marker ID**: `quicktabs-link-marker`
-- **Communication**: DOM attributes observed via MutationObserver
-- **Sandbox Crossing**: DOM mutations are observable across the content/chrome boundary
-- **Performance**: Lightweight observation with no polling
+- **Communication Method**: `window.postMessage()`
+- **Message Type**: `QUICKTABS_URL_HOVER`
+- **Message Direction**: `from-content-to-chrome`
+- **Security**: Works securely across the content/chrome boundary
+- **Performance**: Event-driven with zero overhead
 
-### Extension Modifications Required
+### Using the Extension
 
-> **⚠️ Important**: The Copy-URL-on-Hover extension requires modifications to work with Quick Tabs. 
+> **✅ Easy Setup**: Use the **lite branch** - no modifications required!
 
-📖 **See the [Copy-URL Integration Guide](./COPY_URL_INTEGRATION_GUIDE.md) for complete step-by-step instructions.**
+📖 **See the [Copy-URL Integration Guide](./COPY_URL_INTEGRATION_GUIDE.md) for complete instructions.**
 
-The integration guide includes:
-- Detailed code modifications for the extension's `content.js` file
-- Complete testing procedures
-- Troubleshooting tips
-- Code examples
+#### Quick Setup
 
-#### Quick Summary
+1. Clone the lite branch:
+   ```bash
+   git clone --branch lite https://github.com/ChunkyNosher/copy-URL-on-hover_ChunkyEdition.git
+   ```
 
-The extension needs three simple modifications:
+2. Load the extension in Firefox/Zen Browser:
+   - Navigate to `about:debugging#/runtime/this-firefox`
+   - Click "Load Temporary Add-on"
+   - Select the `manifest.json` file
 
-1. **Add marker initialization code** (~60 lines) after the variable declarations
-2. **Update the mouseover handler** to call `updateQuickTabsMarker(url, title)` when a link is detected
-3. **Update the mouseout handler** to clear the marker with `updateQuickTabsMarker(null, null)`
+3. Start using it:
+   - Hover over any link on YouTube, Twitter, Reddit, etc.
+   - Press **Ctrl+E** to instantly open it in a Quick Tab!
 
-Once modified, the extension will create a hidden DOM marker element that Quick Tabs can observe to detect hovered links across 100+ websites
+The lite branch already includes the postMessage integration - no manual modifications needed!
 
 ## API Reference
 
