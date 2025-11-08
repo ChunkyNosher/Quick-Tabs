@@ -157,41 +157,46 @@ extensions.quicktabs.keyboard_shortcut = "Control+E" // Keyboard shortcut to ope
 
 Quick Tabs integrates with the [Copy-URL-on-Hover Firefox Extension](https://github.com/ChunkyNosher/copy-URL-on-hover_ChunkyEdition) to provide enhanced link detection across web pages.
 
-### How the Integration Works
+### Integration Methods
 
-The integration uses a **secure postMessage bridge** approach:
+Quick Tabs supports **two integration methods** - you can choose the one that best fits your needs:
+
+#### Method 1: postMessage Bridge (Recommended for Lite Branch)
+
+The **postMessage method** uses secure cross-context messaging:
 
 1. **Extension Side**: Copy-URL-on-Hover detects when you hover over a link and sends a secure postMessage to the browser chrome
-2. **Message Format**: The extension sends messages with type `QUICKTABS_URL_HOVER` containing:
-   - `url`: The detected link URL
-   - `title`: The link title or text
-   - `state`: Either `"hovering"` or `"idle"`
+2. **Message Format**: The extension sends messages with type `QUICKTABS_URL_HOVER` containing URL, title, and state
 3. **Quick Tabs Listens**: Quick Tabs listens for these postMessage events on the content window
-4. **Quick Tab Opens**: When you press Ctrl+E while hovering over a link, Quick Tabs reads the URL from the last received message and opens it
+4. **Quick Tab Opens**: When you press Ctrl+E while hovering over a link, Quick Tabs reads the URL and opens it
 
-### Benefits
+**Benefits:**
+- ✅ No DOM pollution - no marker elements created
+- ✅ Event-driven communication - zero overhead
+- ✅ Cross-browser compatible approach
+- ✅ Works with the lite branch out-of-the-box
 
-- ✅ **Secure Communication**: Uses the recommended postMessage API for cross-context communication
-- ✅ **Leverages Extension's Link Detection**: Uses Copy-URL's 100+ website handlers (YouTube, Twitter, Reddit, GitHub, etc.)
-- ✅ **No DOM Pollution**: No marker elements created in web pages
-- ✅ **Better Performance**: Event-driven, no polling or DOM manipulation required
-- ✅ **Graceful Fallback**: Still works with tab hover detection if extension is not installed
+📖 **See the [Copy-URL Integration Guide](./COPY_URL_INTEGRATION_GUIDE.md) for postMessage setup.**
 
-### Technical Details
+#### Method 2: Firefox Preferences Bridge
 
-- **Communication Method**: `window.postMessage()`
-- **Message Type**: `QUICKTABS_URL_HOVER`
-- **Message Direction**: `from-content-to-chrome`
-- **Security**: Works securely across the content/chrome boundary
-- **Performance**: Event-driven with zero overhead
+The **Firefox Preferences method** uses Firefox's built-in preference system:
 
-### Using the Extension
+1. **Extension Side**: Copy-URL extension writes hovered link data to Firefox preferences via `browser.storage.local`
+2. **Preference Observer**: Quick Tabs observes preference changes via `Services.prefs.addObserver`
+3. **Quick Tab Opens**: When you press Ctrl+E, Quick Tabs reads the stored link data and opens it
+
+**Benefits:**
+- ✅ Uses official Firefox APIs - battle-tested for 20+ years
+- ✅ Optional data persistence across browser restarts
+- ✅ Global state - works across all tabs automatically
+- ✅ Easy debugging via about:config
+
+📖 **See the [Firefox Preferences Implementation Guide](./FIREFOX_PREFERENCES_IMPLEMENTATION_GUIDE.md) for detailed setup.**
+
+### Quick Setup (postMessage Method)
 
 > **✅ Easy Setup**: Use the **lite branch** - no modifications required!
-
-📖 **See the [Copy-URL Integration Guide](./COPY_URL_INTEGRATION_GUIDE.md) for complete instructions.**
-
-#### Quick Setup
 
 1. Clone the lite branch:
    ```bash
@@ -208,6 +213,18 @@ The integration uses a **secure postMessage bridge** approach:
    - Press **Ctrl+E** to instantly open it in a Quick Tab!
 
 The lite branch already includes the postMessage integration - no manual modifications needed!
+
+### Choosing a Method
+
+| Feature | postMessage | Firefox Preferences |
+|---------|-------------|---------------------|
+| **Setup Complexity** | Easy (lite branch ready) | Moderate (requires extension mods) |
+| **Browser Support** | Cross-browser | Firefox only |
+| **Data Persistence** | No | Optional |
+| **Debugging** | Console logging | about:config + console |
+| **Best For** | Quick setup, cross-browser | Advanced users, persistence needs |
+
+**Note:** Both methods can coexist in Quick Tabs! They write to the same global variables and work seamlessly together.
 
 ## API Reference
 

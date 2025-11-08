@@ -1987,7 +1987,8 @@
         addTabContextMenuItem();
         setupCommandPaletteIntegration();
 		setupTabHoverDetection();
-		setupLinkHoverDetection();
+		setupLinkHoverDetection(); // postMessage method
+		setupQuickTabsExtensionBridge(); // Firefox Preferences method
 		setupKeyboardShortcuts();
 
 
@@ -2297,6 +2298,138 @@
 	    console.log('QuickTabs: Link hover detection setup complete');
 	}
 
+	/**
+	 * ========================================
+	 * FIREFOX PREFERENCES INTEGRATION
+	 * Alternative method using Services.prefs as bridge
+	 * ========================================
+	 */
+
+	// Global variable to store the preference observer object
+	let quickTabsPrefObserver = null;
+
+	/**
+	 * Helper function to read a preference value
+	 */
+	function readPreference(prefName) {
+	    try {
+	        const prefType = Services.prefs.getPrefType(prefName);
+	        
+	        if (prefType === Services.prefs.PREF_STRING) {
+	            return Services.prefs.getStringPref(prefName, '');
+	        } else if (prefType === Services.prefs.PREF_INT) {
+	            return Services.prefs.getIntPref(prefName, 0);
+	        } else if (prefType === Services.prefs.PREF_BOOL) {
+	            return Services.prefs.getBoolPref(prefName, false);
+	        } else {
+	            // Preference doesn't exist
+	            return null;
+	        }
+	    } catch (e) {
+	        console.warn('[QuickTabs] Error reading preference:', prefName, e);
+	        return null;
+	    }
+	}
+
+	/**
+	 * Set up listener for preference changes from Copy-URL extension
+	 */
+	function setupQuickTabsExtensionBridge() {
+	    console.log('[QuickTabs] Setting up extension preference bridge');
+	    
+	    // Create observer object that receives notifications
+	    quickTabsPrefObserver = {
+	        // This is called whenever a watched preference changes
+	        observe(subject, topic, data) {
+	            // topic will be "nsPref:changed"
+	            // data will be the preference name that changed
+	            
+	            // Double-check it's the right topic
+	            if (topic !== 'nsPref:changed') {
+	                return;
+	            }
+	            
+	            console.log('[QuickTabs] Preference changed:', data);
+	            
+	            // Check if this is one of our QuickTabs preferences
+	            if (!data.startsWith('quicktabs_')) {
+	                return;
+	            }
+	            
+	            // Handle each preference type
+	            if (data === 'quicktabs_hovered_url' || 
+	                data === 'quicktabs_hovered_state') {
+	                
+	                // Read all the preference values
+	                try {
+	                    const url = Services.prefs.getStringPref(
+	                        'quicktabs_hovered_url', 
+	                        ''
+	                    );
+	                    
+	                    const title = Services.prefs.getStringPref(
+	                        'quicktabs_hovered_title',
+	                        ''
+	                    );
+	                    
+	                    const state = Services.prefs.getStringPref(
+	                        'quicktabs_hovered_state',
+	                        'idle'
+	                    );
+	                    
+	                    let timestamp = null;
+	                    try {
+	                        timestamp = Services.prefs.getIntPref(
+	                            'quicktabs_hover_timestamp',
+	                            null
+	                        );
+	                    } catch (e) {
+	                        // Preference doesn't exist, that's fine
+	                    }
+	                    
+	                    // Update the global variables (same as postMessage method)
+	                    if (state === 'hovering' && url) {
+	                        hoveredLinkUrl = url;
+	                        hoveredLinkTitle = title || url;
+	                        console.log('[QuickTabs] Link hover detected from preferences:', url);
+	                    } else if (state === 'idle') {
+	                        hoveredLinkUrl = null;
+	                        hoveredLinkTitle = null;
+	                        console.log('[QuickTabs] Link unhovered (from preferences)');
+	                    }
+	                    
+	                } catch (error) {
+	                    console.warn('[QuickTabs] Error reading preferences:', error);
+	                }
+	            }
+	        }
+	    };
+	    
+	    // Register the observer with Firefox preferences
+	    // The first parameter 'quicktabs_' means: watch all prefs starting with "quicktabs_"
+	    try {
+	        Services.prefs.addObserver('quicktabs_', quickTabsPrefObserver);
+	        console.log('[QuickTabs] Preference observer registered successfully');
+	    } catch (error) {
+	        console.error('[QuickTabs] Failed to register preference observer:', error);
+	    }
+	}
+
+	/**
+	 * Cleanup function for preference observer (call when Quick-Tabs unloads)
+	 */
+	function cleanupExtensionBridge() {
+	    if (quickTabsPrefObserver) {
+	        try {
+	            Services.prefs.removeObserver('quicktabs_', quickTabsPrefObserver);
+	            console.log('[QuickTabs] Preference observer removed');
+	            quickTabsPrefObserver = null;
+	        } catch (error) {
+	            console.warn('[QuickTabs] Error removing preference observer:', error);
+	        }
+	    }
+	}
+
 
 	// Parse keyboard shortcut strings like "Control+E", "Shift+Alt+T", etc.
 	function parseKeyboardShortcut(shortcutString) {
@@ -2536,6 +2669,9 @@
             };
         }
     };
+
+    // Cleanup on window unload
+    window.addEventListener('unload', cleanupExtensionBridge);
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
