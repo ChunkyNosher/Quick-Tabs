@@ -2298,6 +2298,53 @@
 	    console.log('QuickTabs: Link hover detection setup complete');
 	}
 
+	// ============================================================
+	// FIREFOX PREFERENCES BRIDGE - Extension Communication
+	// ============================================================
+
+	function setupQuickTabsExtensionBridge() {
+		console.log('[QuickTabs] Setting up extension preference bridge');
+
+		const quickTabsPrefObserver = {
+			observe(subject, topic, data) {
+				if (topic !== 'nsPref:changed') {
+					return;
+				}
+
+				if (!data.startsWith('quicktabs_')) {
+					return;
+				}
+
+				if (data === 'quicktabs_hovered_url' || data === 'quicktabs_hovered_state') {
+					try {
+						const url = Services.prefs.getStringPref('quicktabs_hovered_url', '');
+						const title = Services.prefs.getStringPref('quicktabs_hovered_title', '');
+						const state = Services.prefs.getStringPref('quicktabs_hovered_state', 'idle');
+
+						if (state === 'hovering' && url) {
+							hoveredLinkUrl = url;
+							hoveredLinkTitle = title || url;
+							console.log('[QuickTabs] Hovered link updated:', url);
+						} else if (state === 'idle') {
+							hoveredLinkUrl = null;
+							hoveredLinkTitle = null;
+						}
+					} catch (error) {
+						console.error('[QuickTabs] Error reading preferences:', error);
+					}
+				}
+			}
+		};
+
+		try {
+			Services.prefs.addObserver('quicktabs_', quickTabsPrefObserver);
+			console.log('[QuickTabs] Preference observer registered');
+		} catch (error) {
+			console.error('[QuickTabs] Failed to register observer:', error);
+		}
+	}
+
+
 	/**
 	 * ========================================
 	 * FIREFOX PREFERENCES INTEGRATION
