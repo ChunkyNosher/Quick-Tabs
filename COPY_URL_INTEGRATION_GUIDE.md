@@ -1,79 +1,38 @@
 # Copy-URL-on-Hover Extension Integration Guide
 
-This guide provides step-by-step instructions on how to modify the [Copy-URL-on-Hover Extension](https://github.com/ChunkyNosher/copy-URL-on-hover_ChunkyEdition) to work with Quick Tabs.
-
-## Important Note
-
-**Quick Tabs now includes built-in link hover detection** - no extension required! This guide is only for users who want specialized link detection for complex sites like YouTube, Twitter, Reddit, etc.
+This guide provides step-by-step instructions on how to use the [Copy-URL-on-Hover Extension](https://github.com/ChunkyNosher/copy-URL-on-hover_ChunkyEdition) with Quick Tabs.
 
 ## Overview
 
-Quick Tabs works by receiving messages from content scripts via Firefox's message manager. To integrate with the Copy-URL extension, the extension needs to use `sendAsyncMessage` instead of `window.postMessage`.
+The integration works through a **secure postMessage bridge**:
+1. The Copy-URL extension detects when you hover over a link on a webpage
+2. It sends a secure `postMessage` to the browser chrome with the link's URL and title
+3. Quick Tabs listens for these messages and makes the link data available for Ctrl+E
 
-### Why This Is Necessary
+## Prerequisites
 
-- **Content scripts** (from extensions) run in a sandboxed, low-privilege context
-- **Browser chrome scripts** (.uc.js files) run in a privileged context
-- `window.postMessage` from content scripts cannot reach chrome scripts due to security boundaries
-- Firefox's **message manager** is the secure way to communicate between these contexts
-- Content scripts must use `sendAsyncMessage` to send to the message manager
-- Chrome scripts use `addMessageListener` on the message manager to receive
+- Use the **lite branch** of the [Copy-URL-on-Hover Extension](https://github.com/ChunkyNosher/copy-URL-on-hover_ChunkyEdition/tree/lite)
+- The lite branch already includes the postMessage integration - no modifications needed!
 
-## Required Modifications
-
-You need to modify the Copy-URL extension's `content.js` file to use `sendAsyncMessage` instead of `window.postMessage`.
+## Installation Steps
 
 ### Step 1: Clone the Extension
 
-Clone the Copy-URL-on-Hover extension:
+Clone the **lite branch** of the Copy-URL-on-Hover extension:
 
 ```bash
-git clone https://github.com/ChunkyNosher/copy-URL-on-hover_ChunkyEdition.git
-cd copy-URL-on-hover_ChunkyEdition
+git clone --branch lite https://github.com/ChunkyNosher/copy-URL-on-hover_ChunkyEdition.git
 ```
 
-### Step 2: Modify content.js
-
-Find the code that sends messages (likely using `window.postMessage`) and replace it with `sendAsyncMessage`.
-
-**Before (using window.postMessage - doesn't work):**
-```javascript
-// Old code - won't work with Quick Tabs
-window.postMessage({ 
-    type: 'CopyURLHover_Hover', 
-    url: url, 
-    title: title 
-}, '*');
-```
-
-**After (using sendAsyncMessage - works correctly):**
-```javascript
-// New code - works with Quick Tabs
-sendAsyncMessage('CopyURLHover:Hover', { 
-    url: url, 
-    title: title 
-});
-```
-
-Similarly, for clearing the hover state:
-
-**Before:**
-```javascript
-window.postMessage({ type: 'CopyURLHover_Clear' }, '*');
-```
-
-**After:**
-```javascript
-sendAsyncMessage('CopyURLHover:Clear', {});
-```
-
-### Step 3: Load the Modified Extension
+### Step 2: Load the Extension in Firefox/Zen Browser
 
 1. Open Firefox/Zen Browser
 2. Navigate to `about:debugging#/runtime/this-firefox`
 3. Click "Load Temporary Add-on"
-4. Select the `manifest.json` file from the modified directory
+4. Select the `manifest.json` file from the cloned directory
 5. The extension should now be loaded and ready to use
+
+That's it! The lite branch already includes the postMessage integration code.
 
 ## How It Works
 
@@ -86,24 +45,24 @@ sendAsyncMessage('CopyURLHover:Clear', {});
 │  Copy-URL Extension (content.js)                            │
 │  ├── Detects link hover (mouseover event)                   │
 │  ├── Extracts URL using 100+ site-specific handlers         │
-│  └── Sends message via sendAsyncMessage:                    │
-│      sendAsyncMessage('CopyURLHover:Hover', {               │
-│        url: url,                                            │
-│        title: title                                         │
-│      });                                                    │
+│  └── Sends postMessage:                                     │
+│      window.postMessage({                                   │
+│        direction: "from-content-to-chrome",                 │
+│        type: 'QUICKTABS_URL_HOVER',                         │
+│        payload: { url, title, state: 'hovering' }           │
+│      }, "*");                                               │
 │                                                              │
 └──────────────────────────┬───────────────────────────────────┘
-                           │ Message Manager
-                           │ (Secure cross-privilege communication)
+                           │ postMessage
+                           │ (Secure cross-context communication)
                            ↓
 ┌─────────────────────────────────────────────────────────────┐
 │                    Browser Chrome Context                    │
 │                                                              │
 │  Quick Tabs (Quick_Tabs.uc.js)                              │
-│  ├── Uses getGroupMessageManager("browsers")                │
-│  ├── Listens via addMessageListener                         │
-│  ├── Receives 'CopyURLHover:Hover' messages                 │
-│  ├── Captures URL and title from message.data               │
+│  ├── Listens for 'message' events                           │
+│  ├── Filters for QUICKTABS_URL_HOVER type                   │
+│  ├── Captures URL and title from payload                    │
 │  ├── User presses Ctrl+E                                    │
 │  └── Creates Quick Tab with captured URL                    │
 │                                                              │
@@ -112,28 +71,17 @@ sendAsyncMessage('CopyURLHover:Clear', {});
 
 ### Message Format
 
-The extension should send messages in this format:
+The extension sends messages in this format:
 
 ```javascript
-// On hover
-sendAsyncMessage('CopyURLHover:Hover', {
-    url: "https://example.com/page",
-    title: "Page Title"
-});
-
-// On unhover  
-sendAsyncMessage('CopyURLHover:Clear', {});
-```
-
-Quick Tabs receives these as:
-```javascript
-// In the message listener
 {
-    name: "CopyURLHover:Hover",  // or "CopyURLHover:Clear"
-    data: {
-        url: "https://example.com/page",
-        title: "Page Title"
-    }
+  direction: "from-content-to-chrome",
+  type: "QUICKTABS_URL_HOVER",
+  payload: {
+    url: "https://example.com/page",
+    title: "Page Title",
+    state: "hovering"  // or "idle" when mouse moves away
+  }
 }
 ```
 
@@ -153,62 +101,30 @@ Quick Tabs receives these as:
 
 1. Open the Browser Console (Ctrl+Shift+J - NOT the page console)
 2. Navigate to any webpage (e.g., https://www.youtube.com)
-3. Look for the messages:
+3. Look for the message:
    ```
-   QuickTabs: Setting up link hover detection via message manager
-   QuickTabs: Message listeners added successfully
-   QuickTabs: Content script loaded successfully
+   QuickTabs: Link hover detection setup complete
+   QuickTabs: Message listener set up successfully
    ```
 
-**Expected Result**: ✅ Quick Tabs sets up the message listener and loads content script
+**Expected Result**: ✅ Quick Tabs sets up the message listener
 
 ---
 
-### Test 3: Verify Link Detection (Built-in)
-
-First, test the built-in link detection (works without the extension):
-
-1. With the browser console still open (Ctrl+Shift+J)
-2. Navigate to any webpage with links (e.g., https://www.github.com)
-3. Hover over any link
-4. Look for messages:
-   ```
-   QuickTabs: Link hover detected from content script: https://...
-   ```
-5. Move your mouse away from the link
-6. Look for message:
-   ```
-   QuickTabs: Link unhovered
-   ```
-
-**Expected Result**: ✅ Built-in link detection works
-
----
-
-### Test 4: Verify Link Detection (Extension)### Test 4: Verify Link Detection (Extension)
-
-If you've modified the Copy-URL extension to use `sendAsyncMessage`:
+### Test 3: Verify Link Detection
 
 1. With the browser console still open (Ctrl+Shift+J)
 2. Navigate to YouTube: https://www.youtube.com
 3. Hover over a video thumbnail
-4. Look for messages (should come from extension):
+4. Look for messages:
    ```
-   QuickTabs: Link hover detected from content script: https://youtube.com/watch?v=...
+   QuickTabs: Link hover detected from extension: https://youtube.com/watch?v=...
    ```
 5. Move your mouse away from the link
 6. Look for message:
    ```
    QuickTabs: Link unhovered
    ```
-
-**Expected Result**:
-- ✅ Messages appear when hovering and unhovering
-- ✅ URL is correctly captured (may be more specific than built-in detection for complex sites)
-
----
-
-### Test 5: Open Quick Tab from Hovered Link
 
 **Expected Result**:
 - ✅ Messages appear when hovering and unhovering

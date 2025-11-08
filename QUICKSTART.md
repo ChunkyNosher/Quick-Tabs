@@ -1,168 +1,102 @@
-# Quick Start Guide for Quick Tabs
+# Quick Start: Copy-URL Extension Integration
 
-Get started with Quick Tabs in just a few minutes!
+This is a quick reference guide to help you get started with the Copy-URL extension integration for Quick Tabs.
 
-## What Quick Tabs Does
+## What This Integration Does
 
-**Quick Tabs** lets you open links in floating browser windows without cluttering your tab bar.
+Allows you to **hover over any link on a webpage** and press **Ctrl+E** to instantly open it in a Quick Tab.
 
-🚀 **New**: Built-in link hover detection - no extension required!
+Works on 100+ websites including:
+- YouTube (videos, channels, playlists)
+- Twitter/X (tweets, profiles)  
+- Reddit (posts, comments)
+- GitHub (repos, issues, PRs)
+- And many more!
 
-### Key Features:
-- **Hover + Ctrl+E**: Hover over any link and press Ctrl+E to open it in a Quick Tab
-- **Right-click menu**: Right-click any link → "Open Quick Tab"
-- **Drag & drop**: Drag links to the Quick Tabs taskbar
-- **Works everywhere**: Native link detection on all websites
+## Quick Setup (5 Minutes)
 
-## Quick Setup (2 Minutes)
+### Step 1: Get the Extension
+Download the Copy-URL-on-Hover extension source code:
+```
+https://github.com/ChunkyNosher/copy-URL-on-hover_ChunkyEdition
+```
 
-### Step 1: Install Quick Tabs
+### Step 2: Modify the Extension
+Follow the [Integration Guide](./COPY_URL_INTEGRATION_GUIDE.md) to make three simple changes to `content.js`:
+1. Add marker initialization code (~60 lines)
+2. Add one line to mouseover handler
+3. Add one line to mouseout handler
 
-**Via Sine (Recommended)**:
-1. Navigate to [Sine](https://github.com/CosmoCreeper/Sine)
-2. Search for "Quick Tabs"
-3. Click **Install**
-4. Clear Startup Cache and restart
+### Step 3: Load the Extension
+1. Open `about:debugging#/runtime/this-firefox` in Firefox/Zen Browser
+2. Click "Load Temporary Add-on"
+3. Select the `manifest.json` file from the modified extension
 
-**Manual Installation**:
-1. Download `Quick_Tabs.uc.js` and `quicktabs-content.js`
-2. Place both files in your profile's `chrome/JS/` directory
-3. Add preferences from `preferences.json` to `about:config`
-4. Clear Startup Cache and restart
-
-### Step 2: Test It!
-
-1. Go to any website with links (e.g., GitHub.com)
-2. Hover over a link
+### Step 4: Test It!
+1. Go to YouTube.com
+2. Hover over a video thumbnail
 3. Press **Ctrl+E**
-4. Quick Tab opens! 🎉
-
-## How It Works
-
-Quick Tabs loads a content script into all web pages that:
-- Detects when you hover over links
-- Sends the link info to Quick Tabs (secure message passing)
-- When you press Ctrl+E, Quick Tab opens with that link
-
-**No external extension needed!** Everything works out of the box.
-
-## Basic Usage
-
-### Opening Quick Tabs
-
-1. **Hover + Keyboard**: Hover over any link, press **Ctrl+E**
-2. **Right-click menu**: Right-click link → "Open Quick Tab"  
-3. **Drag & Drop**: Drag link to Quick Tabs taskbar
-4. **From tabs**: Right-click tab → "Open in Quick Tab"
-
-### Managing Quick Tabs
-
-- **Move**: Drag the header
-- **Resize**: Drag bottom-right corner
-- **Rename**: Double-click title
-- **Minimize**: Click minimize button
-- **Close**: Click X button
-
-### Taskbar
-
-- Hover over taskbar (bottom-right) to see all Quick Tabs
-- Click items to focus/restore
-- Close from taskbar
-
-## Optional: Copy-URL Extension Integration
-
-Want specialized link detection for complex sites like YouTube, Twitter, Reddit?
-
-The [Copy-URL-on-Hover extension](https://github.com/ChunkyNosher/copy-URL-on-hover_ChunkyEdition) can enhance Quick Tabs with 100+ site-specific handlers.
-
-**Setup**:
-1. Download Copy-URL extension source
-2. Modify it to use `sendAsyncMessage` (see [Integration Guide](./COPY_URL_INTEGRATION_GUIDE.md))
-3. Load modified extension in Firefox
-4. Enjoy enhanced link detection!
-
-**Note**: This is optional - Quick Tabs works great without it!
+4. Quick Tab opens with the video! 🎉
 
 ## Documentation
 
-📖 **Full README**: [README.md](./README.md) - Complete feature list and configuration
+📖 **For detailed instructions**: [Integration Guide](./COPY_URL_INTEGRATION_GUIDE.md)
 
-🔧 **Integration Guide**: [COPY_URL_INTEGRATION_GUIDE.md](./COPY_URL_INTEGRATION_GUIDE.md) - Optional Copy-URL extension setup
+🧪 **To verify it works**: [Testing Guide](./TESTING_GUIDE.md)
 
-🧪 **Testing Guide**: [TESTING_GUIDE.md](./TESTING_GUIDE.md) - Verify everything works
+🏗️ **To understand how it works**: [Implementation Summary](./IMPLEMENTATION_SUMMARY.md)
 
 ## Troubleshooting
 
-### "Ctrl+E doesn't work!"
+### "It's not working!"
 
-1. **Verify installation**: Check that both files are in `chrome/JS/`:
-   - `Quick_Tabs.uc.js`
-   - `quicktabs-content.js`
-2. **Check browser console**: Press Ctrl+Shift+J and look for:
-   - "QuickTabs: Message listeners added successfully"
-   - "QuickTabs: Content script loaded successfully"
-3. **Restart browser**: Clear startup cache and restart
-4. **Test on simple page**: Try hovering over links on GitHub or Wikipedia
+1. **Check extension is loaded**: Go to `about:debugging` and verify Copy-URL is active
+2. **Check console messages**: Press F12 and look for "CopyURL: Quick Tabs marker created"
+3. **Check browser console**: Press Ctrl+Shift+J and look for "QuickTabs: Marker observer set up successfully"
+4. **Try hovering slowly**: Make sure you're hovering directly over a link
+5. **Verify modifications**: Double-check you added all three code changes
 
-### "Content script not loaded"
+### "Works on some sites but not others"
 
-If you see "Content script file not found":
-1. Verify `quicktabs-content.js` is in the same directory as `Quick_Tabs.uc.js`
-2. Check file permissions (should be readable)
-3. Path should be: `[profile]/chrome/JS/quicktabs-content.js`
+This is expected! The Copy-URL extension has specialized handlers for 100+ sites. If a site doesn't work:
+- Check if Copy-URL supports that site
+- Try right-click → "Open Quick Tab" instead
+- Or hover over the browser tab and press Ctrl+E
 
-### "Quick Tab opens wrong link"
+### "Quick Tabs opens but wrong link"
 
-Make sure you're hovering directly over the link when pressing Ctrl+E. The detection updates based on your current hover position.
-
-### "Works sometimes but not always"
-
-This is usually timing - make sure you:
-- Hover over the link first
-- Wait a split second  
-- Then press Ctrl+E
-
-## Customization
-
-### Keyboard Shortcut
-
-Change the shortcut in `about:config`:
-```
-extensions.quicktabs.keyboard_shortcut = "Control+E"
-```
-
-Examples:
-- `"Control+E"` (default)
-- `"Control+Shift+E"`
-- `"Alt+Q"`
-
-### Other Settings
-
-See `preferences.json` for all configurable options:
-- Theme (dark/light)
-- Default window size
-- Taskbar behavior
-- Maximum containers
-- And more!
-
-## Benefits
-
-✅ **Works out of the box**: No external dependencies  
-✅ **Secure**: Uses Firefox's message manager API  
-✅ **Universal**: Works on all HTTP/HTTPS websites  
-✅ **Fast**: Instant link detection and Quick Tab opening  
-✅ **Optional enhancement**: Can use Copy-URL for complex sites  
+Make sure you're hovering directly over the link when pressing Ctrl+E. The marker updates based on your current hover position.
 
 ## Need Help?
 
-1. Check the [README.md](./README.md) for detailed feature documentation
-2. Read the [Integration Guide](./COPY_URL_INTEGRATION_GUIDE.md) if using Copy-URL extension
-3. Review the [Testing Guide](./TESTING_GUIDE.md) to verify your setup
+1. Read the [Integration Guide](./COPY_URL_INTEGRATION_GUIDE.md) - detailed step-by-step instructions
+2. Read the [Testing Guide](./TESTING_GUIDE.md) - 18+ tests to verify everything works
+3. Check the [Implementation Summary](./IMPLEMENTATION_SUMMARY.md) - understand the architecture
 4. Open an issue on GitHub - we're here to help!
+
+## Benefits
+
+✅ **Fast workflow**: Hover + Ctrl+E is faster than right-click menus  
+✅ **100+ sites supported**: Works on all major platforms  
+✅ **No code duplication**: Leverages existing extension  
+✅ **Graceful fallback**: Still works with tabs if extension not installed  
+✅ **Secure**: Uses browser-compliant DOM marker bridge  
+
+## Requirements
+
+- Firefox or Zen Browser
+- Quick Tabs uc.js (installed via Sine or manually)
+- Copy-URL extension (modified version)
+- 5 minutes to set up
+
+## Next Steps
+
+1. **Get started**: Follow Step 1-4 above
+2. **Test thoroughly**: Use the [Testing Guide](./TESTING_GUIDE.md)
+3. **Enjoy**: Faster browsing with Quick Tabs! 🚀
 
 ---
 
-**Last Updated**: 2025-11-08  
-**Version**: 2.0 (Built-in link detection)  
+**Last Updated**: 2025-11-07  
 **Issue**: #5  
-**Status**: ✅ Fixed - Native link hover detection implemented
+**Status**: ✅ Implemented and documented
