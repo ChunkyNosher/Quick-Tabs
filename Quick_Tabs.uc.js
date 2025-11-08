@@ -17,39 +17,41 @@
 
 
     // Configuration helper functions
-    const getPref = (prefName, defaultValue = "") => {
-        try {
-            const prefService = Services.prefs;
-            if (prefService.prefHasUserValue(prefName)) {
-                switch (prefService.getPrefType(prefName)) {
-                    case prefService.PREF_STRING:
-                        return prefService.getStringPref(prefName);
-                    case prefService.PREF_INT:
-                        return prefService.getIntPref(prefName);
-                    case prefService.PREF_BOOL:
-                        return prefService.getBoolPref(prefName);
-                }
-            }
-        } catch (e) {
-            console.warn(`QuickTabs: Failed to read preference ${prefName}:`, e);
-        }
-        return defaultValue;
-    };
+	const getPref = (prefName, defaultValue = "") => {
+	    try {
+	        const prefService = Services.prefs;
+	        if (prefService.prefHasUserValue(prefName)) {
+	            switch (prefService.getPrefType(prefName)) {
+	                case prefService.PREF_STRING:
+	                    return prefService.getStringPref(prefName);
+	                case prefService.PREF_INT:
+	                    return prefService.getIntPref(prefName);
+	                case prefService.PREF_BOOL:
+	                    return prefService.getBoolPref(prefName);
+	            } // ✅ Close switch
+	        }
+	        return defaultValue;
+	    } catch (e) {  // ✅ catch paired with try
+	        console.warn(`QuickTabs: Failed to read preference ${prefName}:`, e);
+	        return defaultValue;
+	    }
+	}; // ✅ Close function
 
-    const setPref = (prefName, value) => {
-        try {
-            const prefService = Services.prefs;
-            if (typeof value === 'boolean') {
-                prefService.setBoolPref(prefName, value);
-            } else if (typeof value === 'number') {
-                prefService.setIntPref(prefName, value);
-            } else {
-                prefService.setStringPref(prefName, value);
-            }
-        } catch (e) {
-            console.warn(`QuickTabs: Failed to set preference ${prefName}:`, e);
-        }
-    };
+	const setPref = (prefName, value) => {
+	    try {
+	        const prefService = Services.prefs;
+	        if (typeof value === 'boolean') {
+	            prefService.setBoolPref(prefName, value);
+	        } else if (typeof value === 'number') {
+	            prefService.setIntPref(prefName, value);
+	        } else {
+	            prefService.setStringPref(prefName, value);
+	        } // ✅ Close if-else
+	    } catch (e) {  // ✅ catch is correct
+	        console.warn(`QuickTabs: Failed to set preference ${prefName}:`, e);
+	    } // ✅ Close catch block
+	}; // ✅ Close function
+
 
     // Load configuration
     const THEME = getPref(QUICK_TABS_THEME_PREF, "dark");
