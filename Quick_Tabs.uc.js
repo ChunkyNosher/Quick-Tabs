@@ -128,17 +128,17 @@
             let title = '';
             
             // Get URL
-            if (browser?.currentURI?.spec && !browser.currentURI.spec.startsWith('about:')) {
-                url = browser.currentURI.spec;
-            }
-            
-            // Get title using existing function
-            title = getTabTitleFromElement(tab);
-            
-            return {
-                url: url || '',
-                title: title || 'Quick Tab'
-            };
+	        if (browser?.currentURI?.spec && !browser.currentURI.spec.startsWith('about:')) {
+	            url = browser.currentURI.spec;
+	        }
+	        
+	        // Get title using existing function
+	        title = getTabTitleFromElement(tab);
+	        
+	        return {
+	            url: url || '',
+	            title: title || 'Quick Tab'
+	        };
         } catch (e) {
             console.error('QuickTabs: Error getting tab data:', e);
             return {
@@ -2073,13 +2073,18 @@
     function handleOpenQuickTabCommand() {
         console.log('QuickTabs: cmd_zenOpenQuickTab triggered');
         
-        const url = quickTabCommandData.url || '';
-        const title = quickTabCommandData.title || '';
-        
-        if (!url) {
-            console.warn('QuickTabs: No URL provided for Quick Tab');
-            return;
-        }
+	    const url = quickTabCommandData?.url || '';
+	    const title = quickTabCommandData?.title || '';
+	    
+	    if (!quickTabCommandData) {
+	        console.warn('QuickTabs: Command data not initialized');
+	        return;
+	    }
+	    
+	    if (!url) {
+	        console.warn('QuickTabs: No URL provided for Quick Tab');
+	        return;
+	    }
 
         // Reset command data after use
         quickTabCommandData = { url: '', title: '', sourceTab: null };
@@ -2143,17 +2148,17 @@
 				if (tabsWithListeners.has(tab)) continue;
 				tabsWithListeners.add(tab);
 				
-				tab.addEventListener('mouseenter', () => {
-					hoveredTab = tab;
-					console.log('QuickTabs: Tab hovered detected:', tab.getAttribute('label') || 'unlabeled');
-				});
-
-				tab.addEventListener('mouseleave', () => {
-					if (hoveredTab === tab) {
-						hoveredTab = null;
-						console.log('QuickTabs: Tab hover ended');
-					}
-				});
+		        tab.addEventListener('mouseenter', (event) => {
+		            hoveredTab = event.currentTarget;  // ✅ Use event.currentTarget instead
+		            console.log('QuickTabs: Tab hovered detected:', event.currentTarget.getAttribute('label') || 'unlabeled');
+		        });
+		        
+		        tab.addEventListener('mouseleave', (event) => {
+		            if (hoveredTab === event.currentTarget) {
+		                hoveredTab = null;
+		                console.log('QuickTabs: Tab hover ended');
+		            }
+		        });
 			}
 		};
 
