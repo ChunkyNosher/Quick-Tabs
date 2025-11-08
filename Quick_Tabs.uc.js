@@ -89,7 +89,7 @@
             const hostName = new URL(url).hostname;
             return `https://s2.googleusercontent.com/s2/favicons?domain_url=https://${hostName}&sz=16`;
         } catch (e) {
-            return 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23666"/><text x="8" y="12" text-anchor="middle" fill="white" font-size="10">T</text></svg>';
+            return 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><rect width="16" height="16" fill="%23666"/><text x="8" y="12" text-anchor[...]
         }
     };
 
@@ -2183,119 +2183,49 @@
 		console.log('QuickTabs: Tab hover detection set up');
 	}
 
-	// Set up link hover detection by listening for postMessage from copy-URL extension
-	function setupLinkHoverDetection() {
-	    console.log('QuickTabs: Setting up link hover detection via postMessage listener');
+    // *** MODIFICATION START ***
+    // Set up link hover detection by listening for messages from the content script
+    function setupLinkHoverDetection() {
+        console.log('QuickTabs: Setting up link hover detection via message manager');
 
-	    // Get the active browser element
-	    const getActiveBrowser = () => {
-	        try {
-	            if (typeof gBrowser !== 'undefined' && gBrowser.selectedBrowser) {
-	                return gBrowser.selectedBrowser;
-	            }
-	        } catch (e) {
-	            console.warn('QuickTabs: Could not get active browser:', e);
-	        }
-	        return null;
-	    };
+        const messageListener = {
+            receiveMessage: function(message) {
+                switch (message.name) {
+                    case 'CopyURLHover:Hover':
+                        if (message.data && message.data.url) {
+                            hoveredLinkUrl = message.data.url;
+                            hoveredLinkTitle = message.data.title || getTabTitle(message.data.url);
+                            console.log('QuickTabs: Link hover detected from content script:', hoveredLinkUrl);
+                        }
+                        break;
+                    case 'CopyURLHover:Clear':
+                        hoveredLinkUrl = null;
+                        hoveredLinkTitle = null;
+                        console.log('QuickTabs: Link unhovered');
+                        break;
+                }
+            }
+        };
 
-	    // Set up message listener for a specific browser
-	    const setupMessageListener = (browser) => {
-	        if (!browser || !browser.contentWindow) {
-	            console.log('QuickTabs: Cannot set up message listener - no browser or contentWindow');
-	            return;
-	        }
+        // Add listeners for both hover and clear messages
+        try {
+            const mm = globalThis.getGroupMessageManager("browsers");
+            mm.addMessageListener("CopyURLHover:Hover", messageListener);
+            mm.addMessageListener("CopyURLHover:Clear", messageListener);
+            console.log('QuickTabs: Message listeners added successfully');
 
-	        // Check if this is a valid content tab (not about:blank, chrome://, etc.)
-	        try {
-	            const currentURI = browser.currentURI;
-	            if (currentURI && (currentURI.spec.startsWith('about:') || 
-	                              currentURI.spec.startsWith('chrome://') ||
-	                              currentURI.spec === '')) {
-	                console.log('QuickTabs: Skipping message listener setup for non-content page:', currentURI.spec);
-	                return;
-	            }
-	        } catch (e) {
-	            console.warn('QuickTabs: Could not check browser URI:', e);
-	        }
-
-	        try {
-	            // Add message event listener to the content window
-	            const messageHandler = (event) => {
-	                // Verify message structure and type
-	                if (event.data && 
-	                    event.data.direction === 'from-content-to-chrome' &&
-	                    event.data.type === 'QUICKTABS_URL_HOVER' &&
-	                    event.data.payload) {
-	                    
-	                    const { url, title, state } = event.data.payload;
-	                    
-	                    if (state === 'hovering' && url) {
-	                        hoveredLinkUrl = url;
-	                        hoveredLinkTitle = title || url;
-	                        console.log('QuickTabs: Link hover detected from extension:', url);
-	                    } else if (state === 'idle') {
-	                        hoveredLinkUrl = null;
-	                        hoveredLinkTitle = null;
-	                        console.log('QuickTabs: Link unhovered');
-	                    }
-	                }
-	            };
-
-	            browser.contentWindow.addEventListener('message', messageHandler, false);
-	            console.log('QuickTabs: Message listener set up successfully');
-	        } catch (e) {
-	            console.error('QuickTabs: Error setting up message listener:', e);
-	        }
-	    };
-
-	    // Set up listener for currently active browser
-	    const activeBrowser = getActiveBrowser();
-	    if (activeBrowser) {
-	        setupMessageListener(activeBrowser);
-	    }
-
-	    // When tab switches, re-setup listener
-	    try {
-	        if (typeof gBrowser !== 'undefined') {
-	            gBrowser.tabContainer.addEventListener('TabSelect', (event) => {
-	                console.log('QuickTabs: Tab switched, re-setting up message listener');
-	                hoveredLinkUrl = null;
-	                hoveredLinkTitle = null;
-
-	                const newActiveBrowser = getActiveBrowser();
-	                if (newActiveBrowser) {
-	                    setTimeout(() => {
-	                        setupMessageListener(newActiveBrowser);
-	                    }, 100);
-	                }
-	            });
-	        }
-	    } catch (e) {
-	        console.warn('QuickTabs: Could not set up tab switch listener:', e);
-	    }
-
-	    // Re-setup listener when page loads
-	    try {
-	        if (typeof gBrowser !== 'undefined') {
-	            gBrowser.addEventListener('load', (event) => {
-	                if (event.target && event.target.defaultView) {
-	                    console.log('QuickTabs: Page loaded, re-setting up message listener');
-	                    const browser = gBrowser.getBrowserForDocument(event.target);
-	                    if (browser) {
-	                        setTimeout(() => {
-	                            setupMessageListener(browser);
-	                        }, 500);
-	                    }
-	                }
-	            }, true);
-	        }
-	    } catch (e) {
-	        console.warn('QuickTabs: Could not set up page load listener:', e);
-	    }
-
-	    console.log('QuickTabs: Link hover detection setup complete');
-	}
+            // Store the listener to be removed on cleanup
+            if (!window.QuickTabs) window.QuickTabs = {};
+            window.QuickTabs.cleanup = () => {
+                mm.removeMessageListener("CopyURLHover:Hover", messageListener);
+                mm.removeMessageListener("CopyURLHover:Clear", messageListener);
+                console.log('QuickTabs: Message listeners removed on cleanup');
+            };
+        } catch (e) {
+            console.error('QuickTabs: Error setting up message listeners:', e);
+        }
+    }
+    // *** MODIFICATION END ***
 
 
 	// Parse keyboard shortcut strings like "Control+E", "Shift+Alt+T", etc.
@@ -2543,4 +2473,3 @@
         setTimeout(init, 100);
     }
 })();
-
