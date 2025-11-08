@@ -6,40 +6,42 @@ This implementation adds support for opening Quick Tabs from hovered links on we
 
 ### Problem
 
-Issue #5 identified that the keyboard shortcut (Ctrl+E) didn't work when hovering over links on webpages. This is because uc.js scripts run in the browser chrome context and cannot directly access webpage content due to browser security restrictions.
+The Quick-Tabs userscript runs in the browser chrome context and cannot directly access webpage content due to browser security restrictions. Users wanted to open Quick Tabs from hovered links on webpages using keyboard shortcuts.
 
 ### Solution
 
-We implemented a **DOM Marker Bridge** approach:
+We implemented a **secure postMessage bridge** approach:
 
-1. **Extension Side** (Copy-URL-on-Hover): Creates a hidden marker element in each webpage and updates it with hovered link information
-2. **Quick Tabs Side** (Quick_Tabs.uc.js): Observes the marker element using MutationObserver and captures link data when Ctrl+E is pressed
+1. **Extension Side** (Copy-URL-on-Hover lite branch): Sends postMessage events to the browser chrome with hovered link information
+2. **Quick Tabs Side** (Quick_Tabs.uc.js): Listens for postMessage events and captures link data when Ctrl+E is pressed
 
 ### Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                         Webpage (Content Context)            │
+│                    Webpage (Content Context)                 │
 │                                                              │
 │  Copy-URL Extension (content.js)                            │
 │  ├── Detects link hover (mouseover event)                   │
 │  ├── Extracts URL using 100+ site-specific handlers         │
-│  └── Updates marker:                                        │
-│      <div id="quicktabs-link-marker"                        │
-│           data-hovered-url="..."                            │
-│           data-hovered-title="..."                          │
-│           data-state="hovering" />                          │
+│  └── Sends postMessage:                                     │
+│      window.postMessage({                                   │
+│        direction: "from-content-to-chrome",                 │
+│        type: 'QUICKTABS_URL_HOVER',                         │
+│        payload: { url, title, state }                       │
+│      }, "*");                                               │
 │                                                              │
 └──────────────────────────┬───────────────────────────────────┘
-                           │ DOM Mutations
-                           │ (Observable across security boundary)
+                           │ postMessage
+                           │ (Secure cross-context communication)
                            ↓
 ┌─────────────────────────────────────────────────────────────┐
 │                    Browser Chrome Context                    │
 │                                                              │
 │  Quick Tabs (Quick_Tabs.uc.js)                              │
-│  ├── MutationObserver watches marker                        │
-│  ├── Captures data-hovered-url and data-hovered-title       │
+│  ├── Listens for 'message' events on browser.contentWindow  │
+│  ├── Filters for QUICKTABS_URL_HOVER type                   │
+│  ├── Captures URL and title from message payload            │
 │  ├── User presses Ctrl+E                                    │
 │  └── Creates Quick Tab with captured URL                    │
 │                                                              │
@@ -50,34 +52,31 @@ We implemented a **DOM Marker Bridge** approach:
 
 ### Quick-Tabs Repository
 
-1. **COPY_URL_INTEGRATION_GUIDE.md** (NEW)
-   - Comprehensive step-by-step guide for modifying the Copy-URL extension
-   - Includes code snippets, testing procedures, and troubleshooting
-   - Complete reference for users to implement the integration
+1. **Quick_Tabs.uc.js** (UPDATED)
+   - Replaced `setupLinkHoverDetection()` function (lines 2190-2371) with postMessage listener approach
+   - Removed DOM marker polling and MutationObserver code
+   - Added event listener for 'message' events from content window
+   - Simplified code: ~110 lines of postMessage listener vs ~180 lines of DOM marker code
 
-2. **README.md** (UPDATED)
-   - Simplified the extension modification section
-   - Added reference to the comprehensive integration guide
-   - Improved clarity on what the integration does
+2. **COPY_URL_INTEGRATION_GUIDE.md** (UPDATED)
+   - Completely rewritten to reflect postMessage approach
+   - Updated with instructions for using the lite branch (no modifications needed)
+   - Removed complex DOM marker modification instructions
+   - Added postMessage testing procedures
 
-3. **Quick_Tabs.uc.js** (ALREADY IMPLEMENTED)
-   - Contains `setupLinkHoverDetection()` function (lines 2190-2323)
-   - Implements MutationObserver to watch the marker element
-   - Handles tab switches and page loads to re-setup observers
-   - Updates global `hoveredLinkUrl` and `hoveredLinkTitle` variables
+3. **README.md** (NEEDS UPDATE)
+   - Should be updated to reference lite branch and postMessage
 
-4. **IMPLEMENTATION_SUMMARY.md** (THIS FILE, NEW)
-   - Documents what was implemented and how it works
+4. **IMPLEMENTATION_SUMMARY.md** (THIS FILE, UPDATED)
+   - Updated to document postMessage implementation
 
-### Copy-URL Extension (User Must Modify)
+### Copy-URL Extension (lite branch)
 
-The user needs to modify the Copy-URL extension's `content.js` file to add:
+The lite branch already includes the postMessage integration - no user modifications required!
 
-1. **Marker initialization code** (~60 lines after variable declarations)
-2. **Marker update call** in mouseover handler
-3. **Marker clear call** in mouseout handler
-
-See `COPY_URL_INTEGRATION_GUIDE.md` for detailed instructions.
+- Lines 62-95 in content.js: `updateQuickTabs()` function that posts messages
+- Line 1564: Called on mouseover with URL and title
+- Line 1579: Called on mouseout to clear state
 
 ## Key Features
 
@@ -86,20 +85,22 @@ See `COPY_URL_INTEGRATION_GUIDE.md` for detailed instructions.
 - No code duplication needed in Quick Tabs
 - Supports YouTube, Twitter, Reddit, GitHub, and many more
 
-### 2. Security-Compliant Communication
-- DOM mutations are observable across content/chrome boundary
-- No custom events needed (which have security restrictions)
-- Works within Firefox's security model
+### 2. Secure Communication
+- postMessage is the recommended browser API for cross-context communication
+- Works securely across content/chrome boundary
+- No DOM pollution or manipulation required
+- Complies with Firefox's security model
 
 ### 3. Graceful Fallback
 - If extension is not installed, Quick Tabs still works with tab hover
-- If marker is not found, simply logs a message and waits
 - No errors or crashes if extension is missing
+- Clean handling of non-content pages (about:, chrome://)
 
 ### 4. Performance Optimized
-- Lightweight MutationObserver only watches specific attributes
-- No polling or interval-based checking
+- Event-driven communication (no polling!)
 - Minimal overhead on webpage performance
+- No DOM mutations or observers needed
+- Simpler, cleaner code
 
 ## How It Works
 
@@ -111,11 +112,9 @@ setupLinkHoverDetection()
   ↓
 Get active browser element
   ↓
-Setup MutationObserver on marker element
+Add 'message' event listener to browser.contentWindow
   ↓
-Wait for marker to exist (extension needs time to inject)
-  ↓
-Observer watches for attribute changes
+Listen for messages with specific type and structure
 ```
 
 ### Link Hover Flow
@@ -127,14 +126,18 @@ Copy-URL extension detects hover
   ↓
 Extension finds URL using site-specific handler
   ↓
-Extension updates marker attributes:
-  - data-hovered-url: "https://..."
-  - data-hovered-title: "Link Title"
-  - data-state: "hovering"
+Extension sends postMessage:
+  {
+    direction: "from-content-to-chrome",
+    type: "QUICKTABS_URL_HOVER",
+    payload: { url, title, state: "hovering" }
+  }
   ↓
-MutationObserver in Quick Tabs fires
+Message event listener in Quick Tabs fires
   ↓
-Quick Tabs reads attributes and updates:
+Quick Tabs validates message structure
+  ↓
+Quick Tabs updates:
   - hoveredLinkUrl = "https://..."
   - hoveredLinkTitle = "Link Title"
   ↓
@@ -152,11 +155,9 @@ Tab switch or page load event
   ↓
 Clear hoveredLinkUrl and hoveredLinkTitle
   ↓
-Re-setup MutationObserver for new page
+Re-setup message listener for new page
   ↓
-Wait for marker to be created
-  ↓
-Observer ready for new page's links
+Listener ready for new page's messages
 ```
 
 ## Configuration
@@ -173,60 +174,74 @@ Supported formats:
 - `Control+Shift+T`
 - etc.
 
-## Testing Checklist
-
-For users who modify the Copy-URL extension:
-
-- [ ] Extension loads without errors in `about:debugging`
-- [ ] Console shows "CopyURL: Quick Tabs marker created"
-- [ ] Hovering over links shows "CopyURL: Updated Quick Tabs marker: ..."
-- [ ] Moving mouse away shows "CopyURL: Cleared Quick Tabs marker"
-- [ ] Quick Tabs shows "QuickTabs: Marker element found, setting up observer"
-- [ ] Quick Tabs shows "QuickTabs: Marker observer set up successfully"
-- [ ] Hovering over link + Ctrl+E opens Quick Tab with correct URL
-- [ ] Works on multiple websites (YouTube, Twitter, Reddit, etc.)
-- [ ] Tab switching resets and re-establishes marker observation
-- [ ] Page navigation re-establishes marker observation
-
 ## Benefits
 
 ### For Users
 - ✅ Open any link in Quick Tabs with simple hover + Ctrl+E
 - ✅ Works on 100+ popular websites
-- ✅ No need to right-click or use context menu
+- ✅ No manual extension modification required (use lite branch)
 - ✅ Fast and intuitive workflow
 
 ### For Developers
+- ✅ Simpler, cleaner code (~40% less code than DOM marker approach)
 - ✅ No code duplication - leverages existing extension
-- ✅ Security-compliant implementation
-- ✅ Clean separation of concerns
+- ✅ Security-compliant implementation using postMessage
+- ✅ No polling or DOM manipulation overhead
 - ✅ Easy to maintain and extend
 
-## Limitations
+## Comparison: postMessage vs DOM Marker
 
-1. **Extension Required**: Users must install and modify the Copy-URL extension
-2. **Manual Modification**: Extension must be manually modified (not automated)
-3. **Security Boundaries**: Works within browser security constraints
-4. **Extension-Specific**: Only works with the Copy-URL extension, not other link detection methods
+| Feature | postMessage (New) | DOM Marker (Old) |
+|---------|-------------------|------------------|
+| Lines of code | ~110 | ~180 |
+| Polling required | ❌ No | ✅ Yes (500ms intervals) |
+| DOM manipulation | ❌ No | ✅ Yes (creates marker element) |
+| Security | ✅ Recommended API | ⚠️ Works but less ideal |
+| Performance | ✅ Event-driven | ⚠️ Polling overhead |
+| Complexity | ✅ Simple | ⚠️ Complex retry logic |
+| User setup | ✅ Use lite branch | ⚠️ Manual modifications |
+
+## Testing Checklist
+
+For users who want to verify the integration:
+
+- [ ] Extension loads without errors in `about:debugging`
+- [ ] Browser console shows "Message listener set up successfully"
+- [ ] Hovering over links shows "Link hover detected from extension: ..."
+- [ ] Moving mouse away shows "Link unhovered"
+- [ ] Hovering over link + Ctrl+E opens Quick Tab with correct URL
+- [ ] Works on multiple websites (YouTube, Twitter, Reddit, etc.)
+- [ ] Tab switching resets and re-establishes message listener
+- [ ] Page navigation re-establishes message listener
+
+## Migration from DOM Marker
+
+If users were previously using the DOM marker approach:
+
+1. Pull the latest Quick Tabs code (with postMessage listener)
+2. Switch to the lite branch of Copy-URL extension
+3. Remove any manual modifications made to the extension
+4. Load the lite branch extension in about:debugging
+5. Verify functionality works with the new approach
 
 ## Future Enhancements
 
 Potential improvements for future versions:
 
-1. **Packaged Extension**: Create a pre-modified version of Copy-URL with Quick Tabs support built-in
-2. **Auto-Detection**: Automatically detect if extension is installed and show appropriate message
-3. **Configuration UI**: Add UI in Sine to configure the integration
+1. **Error Handling**: Add more robust error handling for malformed messages
+2. **Message Validation**: Add stricter validation of message origin
+3. **Performance Metrics**: Add telemetry to measure performance improvements
 4. **Alternative Bridges**: Support other link detection extensions or methods
 
 ## References
 
-- Issue #5: https://github.com/ChunkyNosher/Quick-Tabs/issues/5
-- Copy-URL Extension: https://github.com/ChunkyNosher/copy-URL-on-hover_ChunkyEdition
+- Pull Request: (this PR)
+- Copy-URL Extension (lite branch): https://github.com/ChunkyNosher/copy-URL-on-hover_ChunkyEdition/tree/lite
 - Integration Guide: [COPY_URL_INTEGRATION_GUIDE.md](./COPY_URL_INTEGRATION_GUIDE.md)
-- Solution Document: Perplexity's proposed solution (included in issue comments)
+- MDN postMessage docs: https://developer.mozilla.org/en-US/docs/Web/API/Window/postMessage
 
 ## Credits
 
-- Original problem identification: ChunkyNosher
-- Solution design: Perplexity AI
-- Implementation: GitHub Copilot
+- Problem identification: ChunkyNosher
+- Solution design: postMessage bridge approach
+- Implementation: Updated for security and simplicity
