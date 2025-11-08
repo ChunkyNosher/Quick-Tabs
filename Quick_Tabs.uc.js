@@ -2183,8 +2183,7 @@
 		console.log('QuickTabs: Tab hover detection set up');
 	}
 
-    // *** MODIFICATION START ***
-    // Set up link hover detection by listening for messages from the content script
+    // Set up link hover detection by loading content script and listening for messages
     function setupLinkHoverDetection() {
         console.log('QuickTabs: Setting up link hover detection via message manager');
 
@@ -2214,7 +2213,31 @@
             mm.addMessageListener("CopyURLHover:Clear", messageListener);
             console.log('QuickTabs: Message listeners added successfully');
 
-            // Store the listener to be removed on cleanup
+            // Load the content script into all browser tabs
+            // This enables native link hover detection without requiring an external extension
+            try {
+                // Get the profile directory and construct the path to the content script
+                const chromeDir = Services.dirsvc.get("UChrm", Ci.nsIFile);
+                const contentScriptFile = chromeDir.clone();
+                contentScriptFile.append("JS");
+                contentScriptFile.append("quicktabs-content.js");
+                
+                if (contentScriptFile.exists()) {
+                    const contentScriptURI = Services.io.newFileURI(contentScriptFile).spec;
+                    console.log('QuickTabs: Loading content script from:', contentScriptURI);
+                    
+                    mm.loadFrameScript(contentScriptURI, true);
+                    console.log('QuickTabs: Content script loaded successfully');
+                } else {
+                    console.warn('QuickTabs: Content script file not found at:', contentScriptFile.path);
+                    console.warn('QuickTabs: Link hover detection will only work if copy-URL-on-hover extension is installed');
+                }
+            } catch (loadError) {
+                console.warn('QuickTabs: Could not load content script:', loadError);
+                console.warn('QuickTabs: Link hover detection will only work if copy-URL-on-hover extension is installed');
+            }
+
+            // Store the listener and cleanup function
             if (!window.QuickTabs) window.QuickTabs = {};
             window.QuickTabs.cleanup = () => {
                 mm.removeMessageListener("CopyURLHover:Hover", messageListener);
@@ -2225,7 +2248,6 @@
             console.error('QuickTabs: Error setting up message listeners:', e);
         }
     }
-    // *** MODIFICATION END ***
 
 
 	// Parse keyboard shortcut strings like "Control+E", "Shift+Alt+T", etc.
