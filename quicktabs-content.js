@@ -52,10 +52,14 @@
     // Function to send hover message to Quick Tabs
     function sendHoverMessage(url, title) {
         try {
-            sendAsyncMessage('CopyURLHover:Hover', {
-                url: url,
-                title: title || ''
-            });
+            if (typeof sendAsyncMessage === 'function') {
+                sendAsyncMessage('CopyURLHover:Hover', {
+                    url: url,
+                    title: title || ''
+                });
+            } else {
+                console.error('QuickTabs content script: sendAsyncMessage not available');
+            }
         } catch (e) {
             console.error('QuickTabs content script: Error sending hover message:', e);
         }
@@ -64,7 +68,11 @@
     // Function to send clear message to Quick Tabs
     function sendClearMessage() {
         try {
-            sendAsyncMessage('CopyURLHover:Clear', {});
+            if (typeof sendAsyncMessage === 'function') {
+                sendAsyncMessage('CopyURLHover:Clear', {});
+            } else {
+                console.error('QuickTabs content script: sendAsyncMessage not available');
+            }
         } catch (e) {
             console.error('QuickTabs content script: Error sending clear message:', e);
         }
@@ -133,9 +141,17 @@
 
     // Set up event listeners on the document
     function setupEventListeners() {
+        // Only set up on HTTP(S) pages
+        const location = content.location || document.location;
+        if (!location || !location.href.startsWith('http')) {
+            console.log('QuickTabs content script: Skipping non-HTTP page:', location?.href);
+            return;
+        }
+
         // Use capture phase to catch events before they bubble
         document.addEventListener('mouseover', handleMouseOver, true);
         document.addEventListener('mouseout', handleMouseOut, true);
+        console.log('QuickTabs content script: Link hover detection initialized');
     }
 
     // Initialize when DOM is ready
@@ -144,7 +160,5 @@
     } else {
         setupEventListeners();
     }
-
-    console.log('QuickTabs content script: Link hover detection initialized');
 
 })();
