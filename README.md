@@ -31,12 +31,16 @@ Quick Tabs provides a unique way to browse multiple websites simultaneously with
   - Double-click on a Quick Tab's title to customize its name. Renamed titles persist and are not overwritten by page changes.
 - **Zen Command Palette Integration**:
   - Access Quick Tabs commands (e.g., close all, minimize all, expand/minimize specific tabs) directly from the [Zen Command Palette](https://github.com/BibekBhusal0/zen-custom-js).
-- **Copy-URL Extension Integration**:
-  - Works seamlessly with the [Copy-URL-on-Hover Firefox Extension](https://github.com/ChunkyNosher/copy-URL-on-hover_ChunkyEdition) to detect hovered links on web pages
+- **Built-in Link Hover Detection** (New!):
+  - Native link hover detection - no external extension required!
   - Press Ctrl+E (customizable) while hovering over any link to instantly open it in a Quick Tab
-  - Leverages the extension's comprehensive link detection across 100+ websites including YouTube, Twitter, GitHub, Reddit, and more
-  - Falls back to built-in tab hover detection if the extension is not installed
-  - See [Quick Start Guide](./QUICKSTART.md) for setup instructions
+  - Works on all websites automatically
+  - Uses secure message passing between content script and browser chrome
+- **Copy-URL Extension Integration** (Optional):
+  - Optionally works with the [Copy-URL-on-Hover Firefox Extension](https://github.com/ChunkyNosher/copy-URL-on-hover_ChunkyEdition) for advanced link detection
+  - Extension provides specialized handlers for 100+ websites including YouTube, Twitter, GitHub, Reddit, and more
+  - If extension is installed and modified to use `sendAsyncMessage`, it will work seamlessly with Quick Tabs
+  - See [Integration Guide](./COPY_URL_INTEGRATION_GUIDE.md) for details
 - **Quick Search Integration (Coming Soon)**:
   - Open the Quick Search result in a Quick Tab
 
@@ -55,10 +59,19 @@ OR
 
 ### Manual Installation
 
-1. Download `Quick_Tabs.uc.js` (Make sure [Fx-Autoconfig](https://github.com/MrOtherGuy/fx-autoconfig/) is installed)
-2. Place in your Zen profile's `chrome/JS/` directory
+1. Download both `Quick_Tabs.uc.js` and `quicktabs-content.js` (Make sure [Fx-Autoconfig](https://github.com/MrOtherGuy/fx-autoconfig/) is installed)
+2. Place both files in your Zen profile's `chrome/JS/` directory
 3. Add preferences from `preferences.json` to your `about:config` manually
 4. Clear Startup Cache and restart browser
+
+**File Structure:**
+```
+profile/
+└── chrome/
+    └── JS/
+        ├── Quick_Tabs.uc.js
+        └── quicktabs-content.js
+```
 
 ## Usage
 
@@ -67,28 +80,49 @@ OR
 1. **Opening Quick Tabs**:
    - Right-click any link → "Open Quick Tab"
    - **Drag-and-Drop**: Drag a link from any webpage or application onto the Quick Tabs taskbar (bottom-right of the window). The taskbar will appear dynamically when a link is dragged over the browser window.
-   - **Keyboard Shortcut (Ctrl+E)**: Hover over any tab or link and press Ctrl+E to open it in a Quick Tab
+   - **Keyboard Shortcut (Ctrl+E)**: Hover over any link on a webpage and press Ctrl+E to open it in a Quick Tab (works on all websites!)
+   - **From Tabs**: Hover over a browser tab and press Ctrl+E to open it in a Quick Tab
 2. **Managing Windows**: 
    - Drag the header to move
    - Use resize handle (bottom-right) to resize
-   - Minimize/Close buttons in header (this can also be done if through URL bar if you have Zen Command Palette)
+   - Minimize/Close buttons in header (this can also be done through URL bar if you have Zen Command Palette)
    - **Renaming Titles**: Double-click on the Quick Tab's title in its header to edit its name. Press Enter to save or Escape to cancel.
 3. **Taskbar**: Hover over the taskbar (bottom-right) to see all Quick Tabs
 4. **Switching**: Click taskbar items to focus or restore minimized tabs
 
-### Using with Copy-URL-on-Hover Extension (Recommended)
+### Link Hover Detection
 
-For enhanced link detection across websites like YouTube, Twitter, Reddit, and 100+ more:
+Quick Tabs now includes **built-in link hover detection** - no external extension required!
 
-> **⚠️ Important**: The Copy-URL-on-Hover extension requires modifications to work with Quick Tabs. 
+**How it works:**
+1. Quick Tabs automatically loads a content script into all web pages
+2. When you hover over any link on a webpage, the content script detects it
+3. Press **Ctrl+E** (or your configured shortcut) to instantly open the link in a Quick Tab
+4. Works on all websites automatically
+
+**Supported link types:**
+- Regular `<a>` tags with `href` attributes
+- Elements with `data-url`, `data-href`, or `data-link` attributes
+- Works with most modern web applications
+
+### Using with Copy-URL-on-Hover Extension (Optional)
+
+For specialized link detection on complex sites like YouTube, Twitter, Reddit, and 100+ more:
+
+> **ℹ️ Note**: This is **optional**. Quick Tabs works great with built-in link detection on most sites.
+> 
+> The Copy-URL extension provides specialized handlers for sites with complex link structures.
 > 
 > 📖 **See**: 
 > - [Integration Guide](./COPY_URL_INTEGRATION_GUIDE.md) - How to modify the extension
 > - [Testing Guide](./TESTING_GUIDE.md) - How to verify it works correctly
 
+The extension needs to be modified to use `sendAsyncMessage` instead of `window.postMessage`:
+
 1. **Install and Modify the Extension**:
    - Download [Copy-URL-on-Hover](https://github.com/ChunkyNosher/copy-URL-on-hover_ChunkyEdition) source code
    - Follow the [Integration Guide](./COPY_URL_INTEGRATION_GUIDE.md) to apply modifications
+   - The key change: Replace `window.postMessage()` calls with `sendAsyncMessage()`
    - Load the modified extension in Firefox (about:debugging → Load Temporary Add-on)
    - Use the [Testing Guide](./TESTING_GUIDE.md) to verify everything works
 
