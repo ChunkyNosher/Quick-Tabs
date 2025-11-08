@@ -75,7 +75,76 @@
 	let hoveredLinkUrl = null; // Track the currently hovered link URL
 	let hoveredLinkTitle = null; // Track the currently hovered link title
 
+	// ============================================================
+	// FIREFOX PREFERENCES BRIDGE - Listens for extension data
+	// ============================================================
+	
+	/**
+	 * Observer object that listens for preference changes
+	 * When the extension writes to quicktabs_hovered_url,
+	 * this observer gets notified and updates hoveredLinkUrl
+	 */
+	const quickTabsPrefObserver = {
+	    observe(subject, topic, data) {
+	        // Only handle preference change notifications
+	        if (topic !== 'nsPref:changed') {
+	            return;
+	        }
+	        
+	        // Check if this is one of our Quick Tabs preferences
+	        if (!data.startsWith('quicktabs_')) {
+	            return;
+	        }
+	        
+	        console.log('[QuickTabs] Preference changed event:', data);
+	        
+	        // When the hovered URL or state changes, read the new values
+	        if (data === 'quicktabs_hovered_url' || data === 'quicktabs_hovered_state') {
+	            try {
+	                // Read the updated preference values from Firefox
+	                const newUrl = Services.prefs.getStringPref('quicktabs_hovered_url', '');
+	                const newTitle = Services.prefs.getStringPref('quicktabs_hovered_title', '');
+	                const newState = Services.prefs.getStringPref('quicktabs_hovered_state', 'idle');
+	                
+	                console.log('[QuickTabs] Preference observer received:', {
+	                    url: newUrl,
+	                    title: newTitle,
+	                    state: newState
+	                });
+	                
+	                // Update our global variables with the new values
+	                hoveredLinkUrl = newUrl;
+	                hoveredLinkTitle = newTitle;
+	                
+	                console.log('[QuickTabs] Updated hoveredLinkUrl:', hoveredLinkUrl);
+	                
+	            } catch (error) {
+	                console.error('[QuickTabs] Error reading preferences:', error);
+	            }
+	        }
+	    }
+	};
+	
+	// Register this observer with Firefox preferences
+	// 'quicktabs_' means: watch all preferences starting with "quicktabs_"
+	try {
+	    Services.prefs.addObserver('quicktabs_', quickTabsPrefObserver);
+	    console.log('[QuickTabs] Preference observer registered successfully');
+	} catch (error) {
+	    console.error('[QuickTabs] Failed to register preference observer:', error);
+	}
+	
+	// Clean up when the script unloads
+	window.addEventListener('unload', () => {
+	    try {
+	        Services.prefs.removeObserver('quicktabs_', quickTabsPrefObserver);
+	        console.log('[QuickTabs] Preference observer removed');
+	    } catch (error) {
+	        console.warn('[QuickTabs] Error removing observer:', error);
+	    }
+	});
 
+	
     // Quick Tab command state for passing parameters
     let quickTabCommandData = {
         url: '',
